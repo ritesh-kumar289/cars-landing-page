@@ -11,12 +11,16 @@ import { CARS } from '../lib/cars';
  *  - Pure SVG (no 3D canvas) so the car is visible at 0% and renders
  *    instantly, with no GLB-load dependency.
  *  - Side profile, nose pointing RIGHT (direction of travel).
- *  - All car GLBs preload at module-parse so the showcase is hot when
- *    the loader fades.
+ *  - Only the FIRST 2 car GLBs are required for the loader to dismiss.
+ *    The rest stream in lazily as the user scrolls toward them, which is
+ *    the difference between a 6–10 second blocker on slow networks and
+ *    a sub-2-second start.
  */
 
-CARS.forEach((c) => useGLTF.preload(c.model));
-useGLTF.preload('/models/formula_1_generico_2.glb');
+// Eagerly preload only the first two cars (W13 + F40). The rest are
+// fetched on-demand by CarScene as scroll approaches them.
+const PRELOAD_COUNT = 2;
+CARS.slice(0, PRELOAD_COUNT).forEach((c) => useGLTF.preload(c.model));
 
 export default function Loader() {
   const [progress, setProgress] = useState(0);
@@ -42,7 +46,10 @@ export default function Loader() {
     // still downloading. We instead fetch each model URL ourselves with
     // `Cache.add` so the browser caches the bytes and we know exactly when
     // every car is in cache.
-    const expected = CARS.map((c) => c.model);
+    // Only block the loader on the first N cars. The rest stream in
+    // lazily as the user scrolls toward them — see CarScene's lazy mount
+    // logic. This is the single biggest perceived-performance win.
+    const expected = CARS.slice(0, PRELOAD_COUNT).map((c) => c.model);
     let cancelled = false;
     let loaded = 0;
 

@@ -40,8 +40,13 @@ function damp(current: number, target: number, lambda: number, dt: number) {
   return current + (target - current) * (1 - Math.exp(-lambda * dt));
 }
 
-// Preload all GLB/GLTF models so transitions are instant
-CARS.forEach((c) => useGLTF.preload(c.model));
+// Eager preload removed: each CarModelDriven loads its GLB on mount,
+// and we only mount cars within ±LAZY_WINDOW of the active scroll
+// position (see ActiveCar). This keeps the GPU memory + parse cost
+// bounded regardless of how many cars are in CARS.
+/** How many cars on either side of the active one to keep mounted.
+ *  2 = active + 2 ahead + 2 behind = up to 5 GLBs in memory at once. */
+const LAZY_WINDOW = 2;
 
 /**
  * Director — drives the camera on a continuous spline based on scroll.
@@ -179,9 +184,25 @@ function catmullRom(
 function ActiveCar() {
   const groupRefs = useRef<THREE.Group[]>([]);
   const total = CARS.length + 2;
+  // Bitmask of which car indices are currently mounted. Updated only when
+  // the active window changes (not every frame), so React renders are rare.
+  const [mounted, setMounted] = useState<boolean[]>(() => {
+    const arr = new Array(CARS.length).fill(false);
+    // Mount the first window worth of cars immediately so the hero is
+    // populated on first paint.
+    for (let i = 0; i <= LAZY_WINDOW; i++) arr[i] = true;
+    return arr;
+  });
+  const mountedRef = useRef(mounted);
+  mountedRef.current = mounted;
+  // Track which URLs we've already kicked a prefetch for, so we don't
+  // spam the network on every frame the predicate matches.
+  const prefetched = useRef<Set<string>>(new Set());
 
   useFrame(() => {
     const p = scrollRef.current * (total - 1);
+    let dirty = false;
+    const next = mountedRef.current.slice();
     CARS.forEach((_, i) => {
       const center = i + 1;
       const distToCenter = p - center;
@@ -195,20 +216,46 @@ function ActiveCar() {
         g.userData.signed = signed;
         g.visible = v > 0.005;
       }
+      // Lazy mount window: keep this car mounted if it's within
+      // LAZY_WINDOW acts of the current scroll position. Once mounted,
+      // we never UN-mount (avoids re-parsing GLB if the user scrolls
+      // back). With 12 cars × ~15MB avg, peak memory is bounded by
+      // however far they've scrolled \u2014 acceptable.
+      const shouldMount = Math.abs(distToCenter) < LAZY_WINDOW + 0.5;
+      // Prefetch one act earlier than mount: drei's useGLTF.preload kicks
+      // off the download in the background so the GLB is in cache by the
+      // time we actually mount the component. Without this, the car would
+      // appear to "pop in" on fast scrolls.
+      if (
+        Math.abs(distToCenter) < LAZY_WINDOW + 1.5 &&
+        !prefetched.current.has(CARS[i].model)
+      ) {
+        prefetched.current.add(CARS[i].model);
+        useGLTF.preload(CARS[i].model);
+      }
+      if (shouldMount && !next[i]) {
+        next[i] = true;
+        dirty = true;
+      }
     });
+    if (dirty) setMounted(next);
   });
 
   return (
     <>
       {CARS.map((c, i) => (
         <group key={c.id} ref={(el) => { if (el) groupRefs.current[i] = el; }}>
-          <CarModelDriven
-            url={c.model}
-            scale={c.scale}
-            yOffset={c.yOffset}
-            rotationY={c.rotationY}
-            groupRef={() => groupRefs.current[i]}
-          />
+          {mounted[i] ? (
+            <Suspense fallback={null}>
+              <CarModelDriven
+                url={c.model}
+                scale={c.scale}
+                yOffset={c.yOffset}
+                rotationY={c.rotationY}
+                groupRef={() => groupRefs.current[i]}
+              />
+            </Suspense>
+          ) : null}
         </group>
       ))}
       <SharedLights groupRefs={groupRefs} />
