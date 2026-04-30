@@ -305,43 +305,82 @@ function CarModelDriven({
     ref.current.visible = v > 0.005;
 
     const isFront = v > 0.55;
-    if (!dragState.active || !isFront) {
+    // Only accumulate idle yaw when the car is at least partially
+    // visible. While hidden, idle is frozen so the car doesn't spin
+    // off-screen and then "flick" to a random angle on entry.
+    if (v > 0.1 && (!dragState.active || !isFront)) {
       idleRef.current += dt * IDLE_ROTATION_SPEED;
     }
 
-    // Drive-off rotation kick: outgoing/incoming cars get an extra yaw
-    // sweep (banking into a turn) for drama.
-    const driveSpin = (1 - v) * signedDist * 0.6;
+    // Drive-off rotation kick: outgoing cars get a soft yaw sweep as
+    // they leave (signedDist > 0). Incoming cars stay neutral so they
+    // don't flick on entry.
+    const driveSpin =
+      signedDist > 0 ? (1 - v) * Math.min(1, signedDist) * 0.3 : 0;
 
     if (isFront) {
       if (!dragState.active) {
         dragState.yaw += dragState.vel * dt;
         dragState.vel *= Math.exp(-1.6 * dt);
       }
-      ref.current.rotation.y = idleRef.current + dragState.yaw + rotationY + driveSpin;
-    } else {
-      ref.current.rotation.y = idleRef.current + rotationY + driveSpin;
     }
-    // Banking tilt during exit
-    ref.current.rotation.z = -driveSpin * 0.25;
+    const targetYaw =
+      idleRef.current +
+      rotationY +
+      (isFront ? dragState.yaw : 0) +
+      driveSpin;
+
+    // While invisible, hold yaw at the natural rotationY so the next
+    // entry starts from a clean state. While visible, damp toward the
+    // target yaw so any small idle drift / drag is silky.
+    if (v < 0.05) {
+      ref.current.userData.yaw = rotationY;
+    } else {
+      ref.current.userData.yaw = damp(
+        (ref.current.userData.yaw as number | undefined) ?? rotationY,
+        targetYaw,
+        7,
+        dt,
+      );
+    }
+    ref.current.rotation.y = ref.current.userData.yaw;
+    // Banking tilt only on exit, not on entry
+    ref.current.rotation.z = -driveSpin * 0.2;
 
     // ====== Drive-off transition along the car's facing direction ======
     // Forward vector for the car's current yaw (around Y). When fading
     // out, the car drives forward off-screen; when fading in, it
     // approaches from the opposite side. This makes transitions feel
     // like the previous car drove away in the direction it was facing.
-    const yaw = idleRef.current + rotationY;
+    const yaw = ref.current.userData.yaw as number;
     tmpForward.current.set(Math.sin(yaw), 0, Math.cos(yaw));
     // Quadratic ease so the car accelerates as it leaves (and
     // decelerates as it arrives). signedDist sign chooses direction:
     //   signedDist < 0  → previous car: drive forward and exit
     //   signedDist > 0  → next car: arrive from in-front of its motion
-    const driveDist = signedDist * 9 * (1 - v) * (1 - v);
+    const driveDist = signedDist * 6 * (1 - v) * (1 - v);
     const targetX = tmpForward.current.x * driveDist;
     const targetZ = tmpForward.current.z * driveDist;
 
-    ref.current.userData.tx = damp(ref.current.userData.tx ?? targetX, targetX, 5, dt);
-    ref.current.userData.tz = damp(ref.current.userData.tz ?? targetZ, targetZ, 5, dt);
+    // Snap position while invisible so the car re-enters from the
+    // correct staging spot rather than damping in from a stale offset.
+    if (v < 0.05) {
+      ref.current.userData.tx = targetX;
+      ref.current.userData.tz = targetZ;
+    } else {
+      ref.current.userData.tx = damp(
+        (ref.current.userData.tx as number | undefined) ?? targetX,
+        targetX,
+        5,
+        dt,
+      );
+      ref.current.userData.tz = damp(
+        (ref.current.userData.tz as number | undefined) ?? targetZ,
+        targetZ,
+        5,
+        dt,
+      );
+    }
 
     // Auto-ground: the bbox bottom rests on the floor disc (y = -0.69)
     // plus the car-specific yOffset (used for fine art-direction lifts).
