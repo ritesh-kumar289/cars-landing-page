@@ -36,11 +36,11 @@ const W13_LEFT_WINDOW_SIZE = 1.0;
  *  cars, both should already be at v≈0, fully invisible. With window
  *  0.55 the two neighbouring cars stop overlapping at any visible
  *  intensity, killing the "stacked on top" feel during transitions. */
-const DEFAULT_WINDOW_SIZE = 0.55;
+const DEFAULT_WINDOW_SIZE = 0.42;
 /** How far (in scene units) cars travel during their entry/exit drive.
- *  Bumped from 12 → 20 so the incoming car stages well off-screen and
- *  the outgoing car clears the frame before the next one fades up. */
-const DRIVE_DISTANCE = 20;
+ *  Bumped to 28 so the staging gap between adjacent cars is unmistakable
+ *  even when the user scrubs scroll back and forth. */
+const DRIVE_DISTANCE = 28;
 
 /** Smoothly interpolate a value with critical damping. */
 function damp(current: number, target: number, lambda: number, dt: number) {
@@ -143,13 +143,18 @@ function Director() {
       posTmp.current.y += my * 0.25;
     }
 
-    // Single damp call per axis — lookAt is computed directly without
-    // its own damp pass (saves three damp() invocations per frame).
-    const lambda = 3.0;
+    // Single damp call per axis with extra-soft lambda for a glassy
+    // camera glide — fast scroll feels less twitchy.
+    const lambda = 2.2;
     camera.position.x = damp(camera.position.x, posTmp.current.x, lambda, dt);
     camera.position.y = damp(camera.position.y, posTmp.current.y, lambda, dt);
     camera.position.z = damp(camera.position.z, posTmp.current.z, lambda, dt);
-    camera.lookAt(lookAtTmp.current);
+    // Damp the look-at target too so jumps between segments don't yank
+    // the camera's gaze.
+    lookAtCurrent.current.x = damp(lookAtCurrent.current.x, lookAtTmp.current.x, lambda, dt);
+    lookAtCurrent.current.y = damp(lookAtCurrent.current.y, lookAtTmp.current.y, lambda, dt);
+    lookAtCurrent.current.z = damp(lookAtCurrent.current.z, lookAtTmp.current.z, lambda, dt);
+    camera.lookAt(lookAtCurrent.current);
 
     // FOV: cheaper, fixed-target zoom (no extra sin)
     const fovTarget = 34;
@@ -312,7 +317,31 @@ function CarModelDriven({
   const ref = useRef<THREE.Group>(null);
 
   const fit = useMemo(() => {
-    const box = new THREE.Box3().setFromObject(cloned);
+    // Some GLBs (notably the Mustang Boss 302) ship with a built-in
+    // ground/base plane. Including it in the bbox calculation makes
+    // `maxDim` huge, so `fitScale` shrinks the actual car to a thumbnail
+    // and the center sits below the visible body. We exclude obvious
+    // floor planes by skipping any mesh that is dramatically wider/deeper
+    // than it is tall (a typical floor).
+    const box = new THREE.Box3();
+    let any = false;
+    cloned.traverse((o: THREE.Object3D) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.geometry) return;
+      mesh.geometry.computeBoundingBox?.();
+      const gb = mesh.geometry.boundingBox;
+      if (!gb) return;
+      const meshBox = gb.clone().applyMatrix4(mesh.matrixWorld);
+      const ms = new THREE.Vector3();
+      meshBox.getSize(ms);
+      // Floor heuristic: extremely flat (height < 5% of max horizontal
+      // extent) AND wide. Skip from fit calc.
+      const horiz = Math.max(ms.x, ms.z);
+      if (ms.y < horiz * 0.05 && horiz > 1) return;
+      box.union(meshBox);
+      any = true;
+    });
+    if (!any) box.setFromObject(cloned);
     const size = new THREE.Vector3();
     box.getSize(size);
     const center = new THREE.Vector3();
@@ -334,6 +363,21 @@ function CarModelDriven({
         // grounding cue at a fraction of the GPU cost.
         mesh.castShadow = false;
         mesh.receiveShadow = false;
+        // Hide built-in floor/base planes that some GLBs ship with
+        // (Mustang Boss 302 is the worst offender). Same heuristic as
+        // the bbox filter above.
+        if (mesh.geometry) {
+          mesh.geometry.computeBoundingBox?.();
+          const gb = mesh.geometry.boundingBox;
+          if (gb) {
+            const ms = new THREE.Vector3();
+            gb.getSize(ms);
+            const horiz = Math.max(ms.x, ms.z);
+            if (ms.y < horiz * 0.05 && horiz > 1) {
+              mesh.visible = false;
+            }
+          }
+        }
         const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
         if (mat && 'envMapIntensity' in mat) {
           mat.envMapIntensity = 1.4;
