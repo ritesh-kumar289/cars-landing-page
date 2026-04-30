@@ -1,15 +1,50 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { ACTS, TOTAL_ACTS } from '../lib/cars';
 import Marquee from './Marquee';
 
 /**
  * Sections — invisible spacers that drive scroll length, plus visible captions
  * for each act. The 3D scene reads scroll progress from the global provider.
+ *
+ * Parallax: each `[data-parallax]` element is offset on the Y-axis by a
+ * factor of its section's scroll-relative position. Driven via a single
+ * rAF loop that writes transforms to the DOM directly (no React renders).
  */
 export default function Sections() {
+  const rootRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!rootRef.current) return;
+    const root = rootRef.current;
+    let raf = 0;
+
+    const tick = () => {
+      const wh = window.innerHeight;
+      const elements = root.querySelectorAll<HTMLElement>('[data-parallax]');
+      elements.forEach((el) => {
+        const speed = parseFloat(el.dataset.parallax || '0.2');
+        // Use the parent section's center vs viewport center as the
+        // progress signal — gives a clean -1..0..1 range as the section
+        // scrolls through.
+        const section = el.closest('section');
+        if (!section) return;
+        const rect = section.getBoundingClientRect();
+        const sectionCenter = rect.top + rect.height / 2;
+        const viewCenter = wh / 2;
+        const offset = (sectionCenter - viewCenter) / wh; // ~-1..1 across screen
+        const ty = offset * speed * 100; // scale to px
+        el.style.transform = `translate3d(0, ${ty.toFixed(2)}px, 0)`;
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   return (
-    <main className="relative z-10">
+    <main ref={rootRef} className="relative z-10">
       {ACTS.map((a, i) => {
         const isHero = i === 0;
         const isCredits = i === TOTAL_ACTS - 1;
@@ -23,8 +58,11 @@ export default function Sections() {
             className="relative h-screen w-full snap-start"
             data-act={i}
           >
-            {/* Caption block */}
-            <div className={`absolute inset-0 flex ${align} justify-end flex-col px-6 md:px-16 pb-[12vh] pt-[12vh]`}>
+            {/* Caption block — gentle parallax (slower than scroll) */}
+            <div
+              data-parallax="-0.18"
+              className={`absolute inset-0 flex ${align} justify-end flex-col px-6 md:px-16 pb-[12vh] pt-[12vh] will-change-transform`}
+            >
               {isHero && (
                 <div className="max-w-5xl">
                   <div className="smallcaps text-bone/60 mb-4 flex items-center gap-3">
@@ -111,9 +149,12 @@ export default function Sections() {
               )}
             </div>
 
-            {/* Subtle act number watermark */}
+            {/* Subtle act number watermark — strong parallax (faster) */}
             {!isHero && !isCredits && (
-              <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 display text-bone/[0.03] text-[40vw] font-bold leading-none select-none">
+              <div
+                data-parallax="0.55"
+                className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 display text-bone/[0.03] text-[40vw] font-bold leading-none select-none will-change-transform"
+              >
                 {String(i).padStart(2, '0')}
               </div>
             )}
