@@ -1,27 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useScrollProgress, scrollRef } from '../lib/scroll';
 
 /**
- * CarsAudio — plays the user-supplied engine mp3 loop and modulates its
- * playback rate from scroll progress + scroll velocity so it "revs" as
- * the user scrolls between cars. A floating button toggles mute/unmute.
- *
- * Browsers block autoplay until a user gesture, so playback starts on
- * the first click / keydown / touch.
+ * CarsAudio — plays the user-supplied engine mp3 on a constant-rate loop.
+ * A floating button toggles mute/unmute. Browsers block autoplay until a
+ * user gesture, so playback starts on the first click / keydown / touch.
  */
 const ENGINE_SRC = '/engine.mp3';
 
 export default function CarsAudio() {
-  const { act } = useScrollProgress();
   const [enabled, setEnabled] = useState(false);
   const [muted, setMuted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const lastProgressRef = useRef(0);
-  const lastTimeRef = useRef(0);
-  const lastActRef = useRef(-1);
-  const rafRef = useRef<number | null>(null);
 
   // Create the <audio> element once
   useEffect(() => {
@@ -80,47 +71,9 @@ export default function CarsAudio() {
     return () => cancelAnimationFrame(raf);
   }, [enabled, muted]);
 
-  // Modulate playback rate from scroll progress + velocity for a rev feel
-  useEffect(() => {
-    if (!enabled) return;
-    let alive = true;
-    const loop = () => {
-      if (!alive) return;
-      const a = audioRef.current;
-      if (a && !a.paused) {
-        const progress = scrollRef.current;
-        const now = performance.now();
-        const dt = Math.max(1, now - (lastTimeRef.current || now)) / 1000;
-        const dp = Math.abs(progress - lastProgressRef.current) / dt;
-        lastProgressRef.current = progress;
-        lastTimeRef.current = now;
-        const target = 0.85 + progress * 0.25 + Math.min(0.5, dp * 1.4);
-        const cur = a.playbackRate;
-        a.playbackRate = cur + (target - cur) * 0.15;
-      }
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-    return () => {
-      alive = false;
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-    };
-  }, [enabled]);
-
-  // Quick rev "blip" on act change — briefly bumps playback rate
-  useEffect(() => {
-    if (!enabled) return;
-    const a = audioRef.current;
-    if (!a) return;
-    if (lastActRef.current === act) return;
-    lastActRef.current = act;
-    const original = a.playbackRate;
-    a.playbackRate = Math.min(2, original + 0.55);
-    const t = setTimeout(() => {
-      if (audioRef.current) audioRef.current.playbackRate = original;
-    }, 280);
-    return () => clearTimeout(t);
-  }, [act, enabled]);
+  // Audio plays the mp3 at a constant rate — no scroll-driven pitch
+  // modulation, no act-change rev burst (those caused jank during fast
+  // scrolls). The mp3 is the engine; we just loop it.
 
   return (
     <button

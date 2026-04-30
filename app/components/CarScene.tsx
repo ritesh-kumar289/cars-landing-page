@@ -12,16 +12,13 @@ import {
 import {
   EffectComposer,
   Bloom,
-  ChromaticAberration,
   Vignette,
   ToneMapping,
 } from '@react-three/postprocessing';
-import { BlendFunction, ToneMappingMode } from 'postprocessing';
+import { ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
 import { CARS } from '../lib/cars';
 import { scrollRef } from '../lib/scroll';
-
-const CA_OFFSET = new THREE.Vector2(0.0008, 0.0012);
 
 /**
  * Module-level user-drag state. Updated by Canvas pointer handlers,
@@ -457,25 +454,19 @@ function Effects() {
   return (
     <EffectComposer multisampling={0} enableNormalPass={false}>
       <Bloom
-        intensity={0.85}
-        luminanceThreshold={0.55}
-        luminanceSmoothing={0.25}
+        intensity={0.6}
+        luminanceThreshold={0.7}
+        luminanceSmoothing={0.2}
         mipmapBlur
       />
-      <ChromaticAberration
-        offset={CA_OFFSET}
-        radialModulation={false}
-        modulationOffset={0}
-        blendFunction={BlendFunction.NORMAL}
-      />
-      <Vignette eskil={false} offset={0.2} darkness={0.85} />
+      <Vignette eskil={false} offset={0.25} darkness={0.78} />
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
     </EffectComposer>
   );
 }
 
 export default function CarScene() {
-  const [dpr, setDpr] = useState(1.25);
+  const [dpr, setDpr] = useState(1);
   const [reduced, setReduced] = useState(false);
 
   useEffect(() => {
@@ -533,8 +524,8 @@ export default function CarScene() {
       frameloop="always"
     >
       <PerformanceMonitor
-        onIncline={() => setDpr((d) => Math.min(1.75, d + 0.25))}
-        onDecline={() => setDpr((d) => Math.max(1, d - 0.25))}
+        onIncline={() => setDpr((d) => Math.min(1.5, d + 0.25))}
+        onDecline={() => setDpr((d) => Math.max(0.85, d - 0.25))}
       />
       <color attach="background" args={['#050505']} />
       <fog attach="fog" args={['#050505', 8, 22]} />

@@ -45,12 +45,14 @@ export default function ScrollProvider({
   useEffect(() => {
     scrollRef.total = total;
     const lenis = new Lenis({
-      // Snappier feel — the previous 1.05 made the page feel sticky.
-      duration: 0.6,
-      easing: (t) => 1 - Math.pow(1 - t, 3),
+      // Very short smoothing — keeps fast wheel scrolls responsive
+      // without a long queue/easing tail that feels sticky.
+      duration: 0.35,
+      easing: (t) => 1 - Math.pow(1 - t, 2),
       smoothWheel: true,
-      wheelMultiplier: 1.15,
-      touchMultiplier: 1.4,
+      wheelMultiplier: 1.2,
+      touchMultiplier: 1.5,
+      lerp: 0.18,
     });
     lenisRef.current = lenis;
 

@@ -7,15 +7,15 @@ import * as THREE from 'three';
 import { CARS } from '../lib/cars';
 
 /**
- * Loader — clean, full-screen black card with the F1 3D model driving
- * across the screen left → right. The loading percentage sits behind
- * it so it reads like a number being "driven past" by the car.
+ * Loader — black card with a small F1 car canvas that drives left → right
+ * across the screen as progress fills. The percent number sits behind it.
  *
- *  - No SVG silhouette, no vignette/background overlays.
- *  - All car GLBs are preloaded at module-parse time, so the showcase
- *    is ready as soon as the loader fades.
- *  - Progress comes from `THREE.DefaultLoadingManager`, with a slow
- *    ambient ramp + 14 s safety cap so the bar never sits stuck.
+ *  - Tiny canvas (300 x 220) translated by progress so the wheels never
+ *    get clipped by the canvas edges.
+ *  - Side-profile camera so it reads as a car driving past, not a
+ *    rear-three-quarter shot.
+ *  - All car GLBs preload at module-parse so the showcase is hot when
+ *    the loader fades.
  */
 
 const HERO_MODEL = '/models/formula_1_generico_2.glb';
@@ -26,7 +26,12 @@ CARS.forEach((c) => useGLTF.preload(c.model));
 function LoaderCar({ onReady }: { onReady?: () => void }) {
   const { scene } = useGLTF(HERO_MODEL);
   const ref = useRef<THREE.Group>(null);
-  const fitRef = useRef<{ cx: number; cy: number; cz: number; s: number } | null>(null);
+  const fitRef = useRef<{
+    cx: number;
+    cy: number;
+    cz: number;
+    s: number;
+  } | null>(null);
 
   if (!fitRef.current) {
     const box = new THREE.Box3().setFromObject(scene);
@@ -34,29 +39,29 @@ function LoaderCar({ onReady }: { onReady?: () => void }) {
     box.getSize(size);
     const center = new THREE.Vector3();
     box.getCenter(center);
-    const targetH = 1.4;
-    const maxDim = Math.max(size.x, size.y, size.z) || 1;
-    const s = targetH / maxDim;
+    // Fit the longest horizontal dimension into ~2 world units so the
+    // car comfortably fills the small canvas.
+    const targetW = 2.0;
+    const longest = Math.max(size.x, size.z) || 1;
+    const s = targetW / longest;
     fitRef.current = { cx: center.x, cy: center.y, cz: center.z, s };
     scene.traverse((o: THREE.Object3D) => {
       const mesh = o as THREE.Mesh;
       const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
       if (mesh.isMesh && mat && 'envMapIntensity' in mat) {
-        mat.envMapIntensity = 1.6;
+        mat.envMapIntensity = 1.4;
       }
     });
   }
 
-  // gentle bob + a touch of forward lean as it "drives"
-  useFrame((_, dt) => {
+  useFrame(() => {
     if (!ref.current) return;
-    ref.current.rotation.y = -Math.PI / 2 + Math.sin(performance.now() * 0.0015) * 0.06;
+    // Subtle bob/tilt to feel "alive" — but model stays in side profile.
+    const t = performance.now();
     ref.current.position.y =
-      -fitRef.current!.cy * fitRef.current!.s -
-      0.05 +
-      Math.sin(performance.now() * 0.006) * 0.02;
-    ref.current.rotation.z = Math.sin(performance.now() * 0.005) * 0.02;
-    void dt;
+      -fitRef.current!.cy * fitRef.current!.s - 0.05 +
+      Math.sin(t * 0.006) * 0.015;
+    ref.current.rotation.z = Math.sin(t * 0.004) * 0.015;
   });
 
   useEffect(() => {
@@ -67,6 +72,9 @@ function LoaderCar({ onReady }: { onReady?: () => void }) {
   return (
     <group
       ref={ref}
+      // Side profile facing right (-Z toward the camera + rotated -90° around Y
+      // so the long axis is horizontal in screen space).
+      rotation={[0, -Math.PI / 2, 0]}
       position={[-f.cx * f.s, -f.cy * f.s - 0.05, -f.cz * f.s]}
       scale={f.s}
     >
@@ -83,12 +91,13 @@ export default function Loader() {
   const carWrapRef = useRef<HTMLDivElement | null>(null);
 
   // Drive the car wrapper position from progress via the DOM (avoids
-  // re-rendering the whole loader at 60 fps).
+  // re-rendering the whole loader on every progress tick).
   useEffect(() => {
     if (!carWrapRef.current) return;
-    // Map 0..100 → -42vw..+42vw
     const t = Math.min(1, Math.max(0, progress / 100));
-    carWrapRef.current.style.transform = `translateX(${(t - 0.5) * 84}vw)`;
+    // 0% → far-left edge, 100% → far-right edge.
+    // Using calc so the car-box stays fully on-screen at both ends.
+    carWrapRef.current.style.left = `calc(${t * 100}vw - ${t * 320}px)`;
   }, [progress]);
 
   useEffect(() => {
@@ -144,50 +153,62 @@ export default function Loader() {
       className="fixed inset-0 z-[150] bg-ink overflow-hidden transition-opacity duration-700"
       style={{ opacity: done ? 0 : 1, pointerEvents: done ? 'none' : 'auto' }}
     >
-      {/* HUGE percentage that lives BEHIND the car */}
+      {/* Big percentage that lives BEHIND the car */}
       <div
         className="pointer-events-none absolute inset-0 flex items-center justify-center select-none"
         aria-hidden
       >
         <div
-          className="display text-bone/10 leading-none tracking-tighter font-bold"
-          style={{
-            fontSize: 'min(56vw, 56vh)',
-            transition: 'opacity 0.3s ease',
-          }}
+          className="display text-bone/[0.08] leading-none tracking-tighter font-bold"
+          style={{ fontSize: 'min(48vw, 48vh)' }}
         >
           {String(pct).padStart(3, '0')}
         </div>
       </div>
 
-      {/* The F1 — translated left → right by progress, in front of % */}
+      {/* Small F1 canvas — translated left → right by `left` style above.
+          Sits on a horizontal "track" line for context. */}
       <div
         ref={carWrapRef}
-        className="absolute inset-0 will-change-transform"
+        className="absolute will-change-transform"
         style={{
-          transform: 'translateX(-42vw)',
-          transition: 'transform 0.25s linear',
+          top: '50%',
+          left: '0px',
+          width: '320px',
+          height: '220px',
+          transform: 'translateY(-50%)',
           opacity: carReady ? 1 : 0,
-          transitionProperty: 'transform, opacity',
-          transitionDuration: '0.25s, 0.7s',
+          transition: 'opacity 0.7s ease, left 0.18s linear',
         }}
       >
         <Canvas
-          camera={{ position: [0, 0.6, 3.4], fov: 30, near: 0.1, far: 30 }}
+          camera={{ position: [0, 0.45, 3.6], fov: 28, near: 0.1, far: 30 }}
           gl={{ alpha: true, antialias: true }}
           dpr={[1, 1.5]}
           style={{ background: 'transparent' }}
         >
-          <ambientLight intensity={0.45} />
-          <directionalLight position={[3, 4, 2]} intensity={2.4} color="#ffe8c2" />
-          <directionalLight position={[-4, 2, -2]} intensity={1.6} color="#7dd3fc" />
-          <pointLight position={[0, -1, 2]} intensity={1.2} color="#ff3b1f" />
+          <ambientLight intensity={0.55} />
+          <directionalLight position={[3, 4, 4]} intensity={2.2} color="#ffe8c2" />
+          <directionalLight position={[-4, 2, -2]} intensity={1.4} color="#7dd3fc" />
+          <pointLight position={[0, -1, 2]} intensity={1.0} color="#ff3b1f" />
           <Suspense fallback={null}>
-            <Environment preset="warehouse" environmentIntensity={0.6} />
+            <Environment preset="warehouse" environmentIntensity={0.55} />
             <LoaderCar onReady={() => setCarReady(true)} />
           </Suspense>
         </Canvas>
       </div>
+
+      {/* Thin track line under the car for "driving" reference. */}
+      <div
+        className="pointer-events-none absolute left-0 right-0 z-0"
+        style={{
+          top: 'calc(50% + 80px)',
+          height: '1px',
+          background:
+            'linear-gradient(90deg, transparent, rgba(255,59,31,0.35) 20%, rgba(255,59,31,0.35) 80%, transparent)',
+        }}
+        aria-hidden
+      />
 
       {/* Brand mark + thin progress line, anchored to bottom */}
       <div className="absolute inset-x-0 bottom-[12vh] flex flex-col items-center gap-4">
