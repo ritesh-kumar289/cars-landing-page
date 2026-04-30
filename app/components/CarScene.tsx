@@ -415,34 +415,47 @@ function CarModelDriven({
     ref.current.visible = v > 0.005;
 
     const isFront = v > 0.55;
-    // Only accumulate idle yaw when the car is at least partially
-    // visible. While hidden, idle is frozen so the car doesn't spin
-    // off-screen and then "flick" to a random angle on entry.
-    if (v > 0.1 && (!dragState.active || !isFront)) {
-      idleRef.current += dt * IDLE_ROTATION_SPEED;
-    }
+    // Idle auto-rotation REMOVED per user feedback: cars were rotating
+    // continuously which fought with drag and made transitions feel
+    // chaotic. Cars now hold their yaw unless the user actively drags.
 
-    // Drive-off rotation kick: outgoing cars get a soft yaw sweep as
-    // they leave (signedDist > 0). Incoming cars stay neutral so they
-    // don't flick on entry.
-    const driveSpin =
-      signedDist > 0 ? (1 - v) * Math.min(1, signedDist) * 0.3 : 0;
+    // Track which car owns the current drag session. When the active
+    // (front) car changes, commit the previous drag yaw to that car's
+    // userData and reset the global dragState so the next car starts
+    // from its natural rotation rather than inheriting an offset.
+    const wasFront = (ref.current.userData.wasFront as boolean | undefined) ?? false;
+    if (isFront && !wasFront) {
+      // This car just became the active one. Reset shared drag state.
+      dragState.yaw = 0;
+      dragState.vel = 0;
+    }
+    if (!isFront && wasFront) {
+      // This car just left the active slot. Commit the drag yaw it
+      // accumulated so it exits facing wherever the user pointed it.
+      ref.current.userData.committedYaw = dragState.yaw;
+    }
+    ref.current.userData.wasFront = isFront;
+
     if (isFront) {
       if (!dragState.active) {
         dragState.yaw += dragState.vel * dt;
         dragState.vel *= Math.exp(-1.6 * dt);
       }
     }
-    const targetYaw =
-      idleRef.current +
-      rotationY +
-      (isFront ? dragState.yaw : 0) +
-      driveSpin;
 
-    // While invisible, hold yaw at the natural rotationY so the next
-    // entry starts from a clean state. While visible, damp toward the
-    // target yaw so any small idle drift / drag is silky.
-    if (v < 0.05) {
+    const committedYaw = (ref.current.userData.committedYaw as number | undefined) ?? 0;
+    // Front car follows live drag; non-front cars hold their committed
+    // yaw (the angle they had when they last left the active slot, or 0
+    // if they've never been active). NO idle, NO drive-spin sweep \u2014
+    // the car simply exits along whatever direction it's currently
+    // facing.
+    const targetYaw = rotationY + (isFront ? dragState.yaw : committedYaw);
+
+    // While invisible (and approaching from ahead, not exiting), reset
+    // yaw to the natural rotationY so re-entry is clean. Cars that are
+    // CURRENTLY exiting (signedDist < 0) keep their committed yaw so
+    // they drive off in the direction the user pointed them.
+    if (v < 0.05 && signedDist >= 0) {
       ref.current.userData.yaw = rotationY;
     } else {
       ref.current.userData.yaw = damp(
@@ -453,8 +466,8 @@ function CarModelDriven({
       );
     }
     ref.current.rotation.y = ref.current.userData.yaw;
-    // Banking tilt only on exit, not on entry
-    ref.current.rotation.z = -driveSpin * 0.2;
+    // Banking removed with driveSpin \u2014 keep upright always.
+    ref.current.rotation.z = 0;
 
     // ====== Drive-off transition along the car's facing direction ======
     // Forward vector for the car's current yaw (around Y). Outgoing cars
