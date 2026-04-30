@@ -23,10 +23,15 @@ module.exports = {
           '0%, 19%, 21%, 23%, 25%, 54%, 56%, 100%': { opacity: '1' },
           '20%, 24%, 55%': { opacity: '0.4' },
         },
+        spinSlow: {
+          from: { transform: 'rotate(0deg)' },
+          to: { transform: 'rotate(360deg)' },
+        },
       },
       animation: {
         marquee: 'marquee 40s linear infinite',
         flicker: 'flicker 4s linear infinite',
+        spinSlow: 'spinSlow 2.4s linear infinite',
       },
     },
   },
