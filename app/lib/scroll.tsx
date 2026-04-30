@@ -45,12 +45,13 @@ export default function ScrollProvider({
   useEffect(() => {
     scrollRef.total = total;
     const lenis = new Lenis({
-      // Pure lerp smoothing (no duration easing tail) so fast wheel
-      // scrolls stay snappy and never feel "queued".
+      // Higher lerp = snappier response on fast wheel flicks. With heavy
+      // 3D work behind the scroll, anything below 0.18 felt sticky during
+      // multi-flick scrolls.
       smoothWheel: true,
-      wheelMultiplier: 1.1,
-      touchMultiplier: 1.5,
-      lerp: 0.12,
+      wheelMultiplier: 1.3,
+      touchMultiplier: 1.8,
+      lerp: 0.2,
     });
     lenisRef.current = lenis;
 
