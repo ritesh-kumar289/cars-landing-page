@@ -11,16 +11,15 @@ import { CARS } from '../lib/cars';
  *  - Pure SVG (no 3D canvas) so the car is visible at 0% and renders
  *    instantly, with no GLB-load dependency.
  *  - Side profile, nose pointing RIGHT (direction of travel).
- *  - Only the FIRST 2 car GLBs are required for the loader to dismiss.
- *    The rest stream in lazily as the user scrolls toward them, which is
- *    the difference between a 6–10 second blocker on slow networks and
- *    a sub-2-second start.
+ *  - Loader gates on ALL car GLBs so by the time the showcase appears,
+ *    every transition is hot — no per-car parse stalls during scroll.
  */
 
-// Eagerly preload only the first two cars (W13 + F40). The rest are
-// fetched on-demand by CarScene as scroll approaches them.
-const PRELOAD_COUNT = 2;
-CARS.slice(0, PRELOAD_COUNT).forEach((c) => useGLTF.preload(c.model));
+// Preload every car GLB up-front. Yes, this makes the loader run a
+// little longer, but the user explicitly preferred this trade-off:
+// "loading will complete once all model are loaded and renderable on
+// screen" — i.e. zero stalls between transitions.
+CARS.forEach((c) => useGLTF.preload(c.model));
 
 export default function Loader() {
   const [progress, setProgress] = useState(0);
@@ -46,10 +45,10 @@ export default function Loader() {
     // still downloading. We instead fetch each model URL ourselves with
     // `Cache.add` so the browser caches the bytes and we know exactly when
     // every car is in cache.
-    // Only block the loader on the first N cars. The rest stream in
-    // lazily as the user scrolls toward them — see CarScene's lazy mount
-    // logic. This is the single biggest perceived-performance win.
-    const expected = CARS.slice(0, PRELOAD_COUNT).map((c) => c.model);
+    // Block the loader on EVERY car GLB so the showcase is fully primed
+    // by the time the user sees it. Eliminates per-transition parse
+    // stalls.
+    const expected = CARS.map((c) => c.model);
     let cancelled = false;
     let loaded = 0;
 

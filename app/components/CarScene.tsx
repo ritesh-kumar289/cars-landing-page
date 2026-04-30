@@ -30,10 +30,17 @@ const IDLE_ROTATION_SPEED = 0.08;
 /** Visibility window size (in act-progress units) for the first car's left
  *  extension into the hero section. Wider so W13 is partially visible at p=0
  *  without shifting its peak away from its own act (p=1). */
-const W13_LEFT_WINDOW_SIZE = 1.4;
-/** Symmetric visibility window for all other cars. Tighter (< 1.0) so cars
- *  finish exiting before the next one arrives — prevents on-screen overlap. */
-const DEFAULT_WINDOW_SIZE = 0.85;
+const W13_LEFT_WINDOW_SIZE = 1.0;
+/** Symmetric visibility window for all other cars. We want a clean
+ *  hand-off with NO on-screen overlap: at the midpoint between two
+ *  cars, both should already be at v≈0, fully invisible. With window
+ *  0.55 the two neighbouring cars stop overlapping at any visible
+ *  intensity, killing the "stacked on top" feel during transitions. */
+const DEFAULT_WINDOW_SIZE = 0.55;
+/** How far (in scene units) cars travel during their entry/exit drive.
+ *  Bumped from 12 → 20 so the incoming car stages well off-screen and
+ *  the outgoing car clears the frame before the next one fades up. */
+const DRIVE_DISTANCE = 20;
 
 /** Smoothly interpolate a value with critical damping. */
 function damp(current: number, target: number, lambda: number, dt: number) {
@@ -44,9 +51,17 @@ function damp(current: number, target: number, lambda: number, dt: number) {
 // and we only mount cars within ±LAZY_WINDOW of the active scroll
 // position (see ActiveCar). This keeps the GPU memory + parse cost
 // bounded regardless of how many cars are in CARS.
-/** How many cars on either side of the active one to keep mounted.
- *  2 = active + 2 ahead + 2 behind = up to 5 GLBs in memory at once. */
-const LAZY_WINDOW = 2;
+/** How many cars on either side of the active one to keep mounted on
+ *  desktop. Mobile uses a smaller window (set at runtime). */
+const LAZY_WINDOW_DESKTOP = 3;
+const LAZY_WINDOW_MOBILE = 1;
+function detectMobile() {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(max-width: 768px)').matches ||
+    /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent)
+  );
+}
 
 /**
  * Director — drives the camera on a continuous spline based on scroll.
@@ -184,13 +199,19 @@ function catmullRom(
 function ActiveCar() {
   const groupRefs = useRef<THREE.Group[]>([]);
   const total = CARS.length + 2;
+  const isMobileRef = useRef(false);
+  const lazyWindowRef = useRef(LAZY_WINDOW_DESKTOP);
+  useEffect(() => {
+    const m = detectMobile();
+    isMobileRef.current = m;
+    lazyWindowRef.current = m ? LAZY_WINDOW_MOBILE : LAZY_WINDOW_DESKTOP;
+  }, []);
   // Bitmask of which car indices are currently mounted. Updated only when
   // the active window changes (not every frame), so React renders are rare.
   const [mounted, setMounted] = useState<boolean[]>(() => {
     const arr = new Array(CARS.length).fill(false);
-    // Mount the first window worth of cars immediately so the hero is
-    // populated on first paint.
-    for (let i = 0; i <= LAZY_WINDOW; i++) arr[i] = true;
+    arr[0] = true;
+    arr[1] = true;
     return arr;
   });
   const mountedRef = useRef(mounted);
@@ -201,6 +222,7 @@ function ActiveCar() {
 
   useFrame(() => {
     const p = scrollRef.current * (total - 1);
+    const W = lazyWindowRef.current;
     let dirty = false;
     const next = mountedRef.current.slice();
     CARS.forEach((_, i) => {
@@ -216,18 +238,9 @@ function ActiveCar() {
         g.userData.signed = signed;
         g.visible = v > 0.005;
       }
-      // Lazy mount window: keep this car mounted if it's within
-      // LAZY_WINDOW acts of the current scroll position. Once mounted,
-      // we never UN-mount (avoids re-parsing GLB if the user scrolls
-      // back). With 12 cars × ~15MB avg, peak memory is bounded by
-      // however far they've scrolled \u2014 acceptable.
-      const shouldMount = Math.abs(distToCenter) < LAZY_WINDOW + 0.5;
-      // Prefetch one act earlier than mount: drei's useGLTF.preload kicks
-      // off the download in the background so the GLB is in cache by the
-      // time we actually mount the component. Without this, the car would
-      // appear to "pop in" on fast scrolls.
+      const shouldMount = Math.abs(distToCenter) < W + 0.5;
       if (
-        Math.abs(distToCenter) < LAZY_WINDOW + 1.5 &&
+        Math.abs(distToCenter) < W + 1.5 &&
         !prefetched.current.has(CARS[i].model)
       ) {
         prefetched.current.add(CARS[i].model);
@@ -235,6 +248,18 @@ function ActiveCar() {
       }
       if (shouldMount && !next[i]) {
         next[i] = true;
+        dirty = true;
+      }
+      // On mobile, UN-mount cars that have moved well outside the window.
+      // This is what stops the GPU from running out of memory and
+      // crashing the WebGL context after several transitions.
+      if (
+        isMobileRef.current &&
+        !shouldMount &&
+        Math.abs(distToCenter) > W + 2 &&
+        next[i]
+      ) {
+        next[i] = false;
         dirty = true;
       }
     });
@@ -398,8 +423,8 @@ function CarModelDriven({
     // (stays far away until last moment). 12 units is enough to clear
     // any car footprint at scale 1.6.
     const fadeOut = 1 - v;
-    const exitDist = signedDist < 0 ? signedDist * 12 * fadeOut : 0;
-    const enterDist = signedDist > 0 ? signedDist * 12 * fadeOut * fadeOut : 0;
+    const exitDist = signedDist < 0 ? signedDist * DRIVE_DISTANCE * fadeOut : 0;
+    const enterDist = signedDist > 0 ? signedDist * DRIVE_DISTANCE * fadeOut * fadeOut : 0;
     const driveDist = exitDist + enterDist;
     const targetX = tmpForward.current.x * driveDist;
     const targetZ = tmpForward.current.z * driveDist;
@@ -559,14 +584,16 @@ function ActiveStage() {
 
   return (
     <>
+      {/* Floor disc enlarged 20 → 36 so cars staging from ±20 units away
+          on either side never appear to slide off the edge of the world. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.7, 0]}>
-        <circleGeometry args={[20, 48]} />
+        <circleGeometry args={[36, 64]} />
         <meshStandardMaterial ref={stageRef} color={CARS[0].ground} metalness={0.4} roughness={0.6} />
       </mesh>
       <ContactShadows
         position={[0, -0.69, 0]}
         opacity={0.55}
-        scale={10}
+        scale={14}
         blur={2.2}
         far={3}
         resolution={256}
@@ -586,8 +613,12 @@ function Effects() {
 }
 
 export default function CarScene() {
-  const [dpr, setDpr] = useState(1);
+  // Mobile browsers crash the WebGL context after a few heavy GLBs are
+  // uploaded if we let DPR scale up. Pin a much tighter cap on phones.
+  const isMobile = typeof window !== 'undefined' && detectMobile();
+  const [dpr, setDpr] = useState(isMobile ? 0.7 : 1);
   const [reduced, setReduced] = useState(false);
+  const [contextLost, setContextLost] = useState(false);
 
   useEffect(() => {
     const m = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -641,18 +672,35 @@ export default function CarScene() {
         alpha: true,
         powerPreference: 'high-performance',
         toneMapping: THREE.ACESFilmicToneMapping,
+        // Allow recovery if the GPU driver kills our context (common on
+        // mobile when memory is tight).
+        failIfMajorPerformanceCaveat: false,
       }}
-      dpr={[0.7, dpr]}
+      onCreated={({ gl }) => {
+        const canvas = gl.domElement;
+        const onLost = (e: Event) => {
+          e.preventDefault();
+          setContextLost(true);
+        };
+        const onRestored = () => {
+          // Force a remount by toggling state. r3f auto-recreates
+          // resources for visible objects.
+          setContextLost(false);
+        };
+        canvas.addEventListener('webglcontextlost', onLost as EventListener);
+        canvas.addEventListener('webglcontextrestored', onRestored as EventListener);
+      }}
+      dpr={isMobile ? [0.5, 0.85] : [0.7, dpr]}
       camera={{ position: [0, 1, 6], fov: 35, near: 0.1, far: 60 }}
       style={{ position: 'fixed', inset: 0, zIndex: 0, cursor: 'grab', touchAction: 'pan-y' }}
       frameloop="always"
     >
       <PerformanceMonitor
-        onIncline={() => setDpr((d) => Math.min(1.1, d + 0.15))}
-        onDecline={() => setDpr((d) => Math.max(0.7, d - 0.2))}
+        onIncline={() => setDpr((d) => Math.min(isMobile ? 0.85 : 1.1, d + 0.1))}
+        onDecline={() => setDpr((d) => Math.max(isMobile ? 0.5 : 0.7, d - 0.2))}
       />
       <color attach="background" args={['#050505']} />
-      <fog attach="fog" args={['#050505', 8, 22]} />
+      <fog attach="fog" args={['#050505', 12, 38]} />
 
       <Suspense fallback={null}>
         <Environment preset="warehouse" environmentIntensity={0.55} />
@@ -662,7 +710,7 @@ export default function CarScene() {
 
       <Suspense fallback={null}>
         <ActiveStage />
-        <ActiveCar />
+        {!contextLost && <ActiveCar />}
         <Director />
         {!reduced && <Effects />}
       </Suspense>
