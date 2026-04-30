@@ -443,11 +443,16 @@ function CarModelDriven({
 
   const centerOffset = useMemo<[number, number, number]>(
     () => [
-      -fit.center.x * scale * fit.fitScale,
-      -fit.center.y * scale * fit.fitScale,
-      -fit.center.z * scale * fit.fitScale,
+      // Inner group lives INSIDE the outer (which applies scale*fitScale).
+      // So the offset must be in the cloned model's *local* (un-scaled)
+      // units \u2014 the outer group will scale it for us. Pre-multiplying
+      // here was double-scaling the offset and pushing models like the
+      // Mustang (whose origin sits far from its bbox center) off-screen.
+      -fit.center.x,
+      -fit.center.y,
+      -fit.center.z,
     ],
-    [fit, scale],
+    [fit],
   );
 
   return (
