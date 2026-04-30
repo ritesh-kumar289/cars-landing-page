@@ -1,102 +1,38 @@
 'use client';
 
-import { useEffect, useRef, useState, Suspense } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { useGLTF, Environment } from '@react-three/drei';
+import { useEffect, useRef, useState } from 'react';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { CARS } from '../lib/cars';
 
 /**
- * Loader — black card with a small F1 car canvas that drives left → right
+ * Loader — black card with an SVG F1 car silhouette that drives left → right
  * across the screen as progress fills. The percent number sits behind it.
  *
- *  - Tiny canvas (300 x 220) translated by progress so the wheels never
- *    get clipped by the canvas edges.
- *  - Side-profile camera so it reads as a car driving past, not a
- *    rear-three-quarter shot.
+ *  - Pure SVG (no 3D canvas) so the car is visible at 0% and renders
+ *    instantly, with no GLB-load dependency.
+ *  - Side profile, nose pointing RIGHT (direction of travel).
  *  - All car GLBs preload at module-parse so the showcase is hot when
  *    the loader fades.
  */
 
-const HERO_MODEL = '/models/formula_1_generico_2.glb';
-
-useGLTF.preload(HERO_MODEL);
 CARS.forEach((c) => useGLTF.preload(c.model));
-
-function LoaderCar({ onReady }: { onReady?: () => void }) {
-  const { scene } = useGLTF(HERO_MODEL);
-  const ref = useRef<THREE.Group>(null);
-  const fitRef = useRef<{
-    cx: number;
-    cy: number;
-    cz: number;
-    s: number;
-  } | null>(null);
-
-  if (!fitRef.current) {
-    const box = new THREE.Box3().setFromObject(scene);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    // Fit the longest horizontal dimension into ~2 world units so the
-    // car comfortably fills the small canvas.
-    const targetW = 2.0;
-    const longest = Math.max(size.x, size.z) || 1;
-    const s = targetW / longest;
-    fitRef.current = { cx: center.x, cy: center.y, cz: center.z, s };
-    scene.traverse((o: THREE.Object3D) => {
-      const mesh = o as THREE.Mesh;
-      const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
-      if (mesh.isMesh && mat && 'envMapIntensity' in mat) {
-        mat.envMapIntensity = 1.4;
-      }
-    });
-  }
-
-  useFrame(() => {
-    if (!ref.current) return;
-    // Subtle bob/tilt to feel "alive" — but model stays in side profile.
-    const t = performance.now();
-    ref.current.position.y =
-      -fitRef.current!.cy * fitRef.current!.s - 0.05 +
-      Math.sin(t * 0.006) * 0.015;
-    ref.current.rotation.z = Math.sin(t * 0.004) * 0.015;
-  });
-
-  useEffect(() => {
-    onReady?.();
-  }, [onReady]);
-
-  const f = fitRef.current!;
-  return (
-    <group
-      ref={ref}
-      // Side profile facing right (-Z toward the camera + rotated -90° around Y
-      // so the long axis is horizontal in screen space).
-      rotation={[0, -Math.PI / 2, 0]}
-      position={[-f.cx * f.s, -f.cy * f.s - 0.05, -f.cz * f.s]}
-      scale={f.s}
-    >
-      <primitive object={scene} />
-    </group>
-  );
-}
+useGLTF.preload('/models/formula_1_generico_2.glb');
 
 export default function Loader() {
   const [progress, setProgress] = useState(0);
   const [done, setDone] = useState(false);
   const [hide, setHide] = useState(false);
-  const [carReady, setCarReady] = useState(false);
   const carWrapRef = useRef<HTMLDivElement | null>(null);
+  const wheelLRef = useRef<SVGGElement | null>(null);
+  const wheelRRef = useRef<SVGGElement | null>(null);
 
   // Drive the car wrapper position from progress via the DOM (avoids
-  // re-rendering the whole loader on every progress tick).
+  // re-rendering on every progress tick).
   useEffect(() => {
     if (!carWrapRef.current) return;
     const t = Math.min(1, Math.max(0, progress / 100));
-    // 0% → far-left edge, 100% → far-right edge.
-    // Using calc so the car-box stays fully on-screen at both ends.
+    // 0% → far-left edge (left:0), 100% → car-box flush against right edge.
     carWrapRef.current.style.left = `calc(${t * 100}vw - ${t * 320}px)`;
   }, [progress]);
 
@@ -108,7 +44,7 @@ export default function Loader() {
     };
     const onLoad = () => {
       setProgress(100);
-      setTimeout(() => setDone(true), 500);
+      setTimeout(() => setDone(true), 450);
     };
     const onError = () => {
       setProgress((p) => Math.min(99, p + 4));
@@ -119,7 +55,7 @@ export default function Loader() {
 
     let raf = 0;
     const tick = () => {
-      setProgress((p) => (p < 92 ? p + (92 - p) * 0.008 : p));
+      setProgress((p) => (p < 92 ? p + (92 - p) * 0.012 : p));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -127,7 +63,7 @@ export default function Loader() {
     const hardTimeout = setTimeout(() => {
       setProgress(100);
       setDone(true);
-    }, 14000);
+    }, 12000);
 
     return () => {
       cancelAnimationFrame(raf);
@@ -138,9 +74,26 @@ export default function Loader() {
     };
   }, []);
 
+  // Spin the wheels via direct DOM (no React re-renders).
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    let phase = 0;
+    const tick = (t: number) => {
+      const dt = Math.max(1, t - last);
+      last = t;
+      phase += dt * 0.5;
+      if (wheelLRef.current) wheelLRef.current.style.transform = `rotate(${phase}deg)`;
+      if (wheelRRef.current) wheelRRef.current.style.transform = `rotate(${phase}deg)`;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   useEffect(() => {
     if (!done) return;
-    const t = setTimeout(() => setHide(true), 900);
+    const t = setTimeout(() => setHide(true), 800);
     return () => clearTimeout(t);
   }, [done]);
 
@@ -166,52 +119,128 @@ export default function Loader() {
         </div>
       </div>
 
-      {/* Small F1 canvas — translated left → right by `left` style above.
-          Sits on a horizontal "track" line for context. */}
-      <div
-        ref={carWrapRef}
-        className="absolute will-change-transform"
-        style={{
-          top: '50%',
-          left: '0px',
-          width: '320px',
-          height: '220px',
-          transform: 'translateY(-50%)',
-          opacity: carReady ? 1 : 0,
-          transition: 'opacity 0.7s ease, left 0.18s linear',
-        }}
-      >
-        <Canvas
-          camera={{ position: [0, 0.45, 3.6], fov: 28, near: 0.1, far: 30 }}
-          gl={{ alpha: true, antialias: true }}
-          dpr={[1, 1.5]}
-          style={{ background: 'transparent' }}
-        >
-          <ambientLight intensity={0.55} />
-          <directionalLight position={[3, 4, 4]} intensity={2.2} color="#ffe8c2" />
-          <directionalLight position={[-4, 2, -2]} intensity={1.4} color="#7dd3fc" />
-          <pointLight position={[0, -1, 2]} intensity={1.0} color="#ff3b1f" />
-          <Suspense fallback={null}>
-            <Environment preset="warehouse" environmentIntensity={0.55} />
-            <LoaderCar onReady={() => setCarReady(true)} />
-          </Suspense>
-        </Canvas>
-      </div>
-
-      {/* Thin track line under the car for "driving" reference. */}
+      {/* Track line under the car */}
       <div
         className="pointer-events-none absolute left-0 right-0 z-0"
         style={{
-          top: 'calc(50% + 80px)',
+          top: 'calc(50% + 60px)',
           height: '1px',
           background:
-            'linear-gradient(90deg, transparent, rgba(255,59,31,0.35) 20%, rgba(255,59,31,0.35) 80%, transparent)',
+            'linear-gradient(90deg, transparent, rgba(255,59,31,0.35) 15%, rgba(255,59,31,0.45) 50%, rgba(255,59,31,0.35) 85%, transparent)',
         }}
         aria-hidden
       />
 
+      {/* Speed dashes for motion */}
+      <div
+        className="pointer-events-none absolute z-0"
+        aria-hidden
+        style={{
+          top: 'calc(50% - 4px)',
+          left: 0,
+          right: 0,
+          height: '8px',
+          opacity: 0.35,
+          background:
+            'repeating-linear-gradient(90deg, rgba(255,255,255,0.0) 0 6px, rgba(255,255,255,0.18) 6px 10px)',
+          maskImage:
+            'linear-gradient(90deg, transparent, black 20%, black 80%, transparent)',
+          WebkitMaskImage:
+            'linear-gradient(90deg, transparent, black 20%, black 80%, transparent)',
+        }}
+      />
+
+      {/* The car silhouette — translated left → right via inline `left`. */}
+      <div
+        ref={carWrapRef}
+        className="absolute will-change-transform z-10"
+        style={{
+          top: '50%',
+          left: '0px',
+          width: '320px',
+          height: '120px',
+          transform: 'translateY(-50%)',
+          transition: 'left 0.16s linear',
+          filter: 'drop-shadow(0 12px 18px rgba(255,59,31,0.25))',
+        }}
+      >
+        <svg
+          viewBox="0 0 320 120"
+          width="100%"
+          height="100%"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden
+        >
+          <defs>
+            <linearGradient id="bodyGrad" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="#ff5b35" />
+              <stop offset="55%" stopColor="#e0341a" />
+              <stop offset="100%" stopColor="#7a1707" />
+            </linearGradient>
+            <linearGradient id="tireGrad" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="#2a2a2a" />
+              <stop offset="100%" stopColor="#0a0a0a" />
+            </linearGradient>
+          </defs>
+
+          <ellipse cx="160" cy="100" rx="140" ry="6" fill="rgba(255,59,31,0.18)" />
+
+          {/* Floor / sidepod (nose at right) */}
+          <path
+            d="M 30 80 L 60 70 L 110 64 L 180 60 L 240 58 L 295 62 L 305 72 L 300 86 L 250 88 L 60 88 Z"
+            fill="url(#bodyGrad)"
+          />
+          {/* Cockpit */}
+          <path
+            d="M 130 60 L 150 38 L 175 32 L 205 32 L 218 44 L 222 58 Z"
+            fill="#1a1a1a"
+          />
+          {/* Helmet + visor */}
+          <ellipse cx="182" cy="40" rx="14" ry="8" fill="#f4f4f4" />
+          <rect x="172" y="36" width="20" height="3" fill="#0a0a0a" />
+          {/* Front wing (right) */}
+          <path d="M 290 80 L 318 78 L 318 86 L 290 86 Z" fill="#1a1a1a" />
+          <rect x="295" y="74" width="22" height="3" fill="#ff3b1f" />
+          {/* Rear wing (left) */}
+          <path d="M 18 60 L 38 60 L 38 84 L 18 84 Z" fill="#1a1a1a" />
+          <rect x="14" y="56" width="28" height="4" fill="#ff3b1f" />
+          {/* Engine cover highlight */}
+          <path
+            d="M 70 70 L 130 64 L 130 70 L 80 76 Z"
+            fill="rgba(255,255,255,0.18)"
+          />
+
+          {/* Rear wheel (left in side view) */}
+          <g
+            ref={wheelLRef}
+            style={{
+              transformOrigin: '70px 88px',
+              transformBox: 'view-box',
+            }}
+          >
+            <circle cx="70" cy="88" r="18" fill="url(#tireGrad)" />
+            <circle cx="70" cy="88" r="7" fill="#2a2a2a" stroke="#888" strokeWidth="1" />
+            <rect x="62" y="86" width="16" height="4" fill="#666" />
+            <rect x="68" y="80" width="4" height="16" fill="#666" />
+          </g>
+          {/* Front wheel (right in side view) */}
+          <g
+            ref={wheelRRef}
+            style={{
+              transformOrigin: '260px 88px',
+              transformBox: 'view-box',
+            }}
+          >
+            <circle cx="260" cy="88" r="18" fill="url(#tireGrad)" />
+            <circle cx="260" cy="88" r="7" fill="#2a2a2a" stroke="#888" strokeWidth="1" />
+            <rect x="252" y="86" width="16" height="4" fill="#666" />
+            <rect x="258" y="80" width="4" height="16" fill="#666" />
+          </g>
+        </svg>
+      </div>
+
       {/* Brand mark + thin progress line, anchored to bottom */}
-      <div className="absolute inset-x-0 bottom-[12vh] flex flex-col items-center gap-4">
+      <div className="absolute inset-x-0 bottom-[12vh] flex flex-col items-center gap-4 z-20">
         <div className="display text-bone text-3xl md:text-5xl animate-flicker">
           OFF<em>TRACKS</em>
         </div>

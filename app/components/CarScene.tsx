@@ -403,8 +403,8 @@ function CinematicLightsDriven({
         intensity={0}
         color="#ffe8c2"
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize-width={512}
+        shadow-mapSize-height={512}
       />
       <directionalLight ref={rimRef} position={[-6, 4, -4]} intensity={0} color={rim} />
       <pointLight ref={fillRef} position={[0, 1.2, 4]} intensity={0} color={fill} distance={12} />
@@ -439,11 +439,11 @@ function ActiveStage() {
       </mesh>
       <ContactShadows
         position={[0, -0.69, 0]}
-        opacity={0.7}
+        opacity={0.6}
         scale={12}
         blur={2.5}
         far={4}
-        resolution={1024}
+        resolution={512}
         color="#000000"
       />
     </>

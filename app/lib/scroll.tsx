@@ -45,14 +45,12 @@ export default function ScrollProvider({
   useEffect(() => {
     scrollRef.total = total;
     const lenis = new Lenis({
-      // Very short smoothing — keeps fast wheel scrolls responsive
-      // without a long queue/easing tail that feels sticky.
-      duration: 0.35,
-      easing: (t) => 1 - Math.pow(1 - t, 2),
+      // Pure lerp smoothing (no duration easing tail) so fast wheel
+      // scrolls stay snappy and never feel "queued".
       smoothWheel: true,
-      wheelMultiplier: 1.2,
+      wheelMultiplier: 1.1,
       touchMultiplier: 1.5,
-      lerp: 0.18,
+      lerp: 0.12,
     });
     lenisRef.current = lenis;
 
@@ -70,12 +68,12 @@ export default function ScrollProvider({
       scrollRef.current = p;
       scrollRef.act = a;
 
-      // Only commit to React when the active *act* changes (rare event)
-      // or every ~250 ms as a safety net. We never commit `progress` —
-      // subscribers should read `scrollRef.current` from a rAF loop.
-      const dueByTime = time - lastReactCommit > 250;
+      // Only commit to React when the active *act* changes (rare event).
+      // Progress subscribers should read `scrollRef.current` from a rAF
+      // loop — committing `progress` to React state every frame causes
+      // expensive re-renders during fast scrolls.
       const actChanged = a !== lastReactAct;
-      if (actChanged || dueByTime) {
+      if (actChanged) {
         lastReactCommit = time;
         lastReactAct = a;
         setProgress(p);
