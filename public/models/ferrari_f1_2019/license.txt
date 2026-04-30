@@ -1,0 +1,11 @@
+Model Information:
+* title:	Ferrari F1 2019
+* source:	https://sketchfab.com/3d-models/ferrari-f1-2019-1b050bffe4e749b586b4782ee7ff4fd0
+* author:	valvetin (https://sketchfab.com/valvetin)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Ferrari F1 2019" (https://sketchfab.com/3d-models/ferrari-f1-2019-1b050bffe4e749b586b4782ee7ff4fd0) by valvetin (https://sketchfab.com/valvetin) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
