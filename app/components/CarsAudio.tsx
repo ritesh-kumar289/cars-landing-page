@@ -1,117 +1,42 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useScrollProgress } from '../lib/scroll';
-import { CARS } from '../lib/cars';
+import { useScrollProgress, scrollRef } from '../lib/scroll';
 
 /**
- * CarsAudio — synthesized cinematic engine soundscape using the Web Audio API.
+ * CarsAudio — plays the user-supplied engine mp3 loop and modulates its
+ * playback rate from scroll progress + scroll velocity so it "revs" as
+ * the user scrolls between cars. A floating button toggles mute/unmute.
  *
- * - A low sawtooth + a higher detuned saw create the engine "growl".
- * - A filtered noise source layers a road/turbulence rumble.
- * - Pitch & filter cutoff are modulated by scroll progress (revs follow scroll
- *   speed) and the active car's "personality" (each car has a unique base RPM).
- * - On every act change we fire a short rev / whoosh transient.
- *
- * Browsers block autoplay until a user gesture, so audio is initialized on
- * the first click/keydown. A floating button lets the user mute/unmute.
+ * Browsers block autoplay until a user gesture, so playback starts on
+ * the first click / keydown / touch.
  */
+const ENGINE_SRC = '/engine.mp3';
+
 export default function CarsAudio() {
-  const { progress, act } = useScrollProgress();
+  const { act } = useScrollProgress();
   const [enabled, setEnabled] = useState(false);
   const [muted, setMuted] = useState(false);
-  const ctxRef = useRef<AudioContext | null>(null);
-  const masterRef = useRef<GainNode | null>(null);
-  const oscARef = useRef<OscillatorNode | null>(null);
-  const oscBRef = useRef<OscillatorNode | null>(null);
-  const filterRef = useRef<BiquadFilterNode | null>(null);
-  const noiseGainRef = useRef<GainNode | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastProgressRef = useRef(0);
   const lastTimeRef = useRef(0);
   const lastActRef = useRef(-1);
   const rafRef = useRef<number | null>(null);
 
-  // Initialize audio graph on first user gesture
+  // Create the <audio> element once
   useEffect(() => {
-    if (!enabled) return;
-    const Ctor =
-      (window as any).AudioContext || (window as any).webkitAudioContext;
-    if (!Ctor) return;
-    const ctx: AudioContext = new Ctor();
-    ctxRef.current = ctx;
-
-    const master = ctx.createGain();
-    master.gain.value = 0;
-    master.connect(ctx.destination);
-    masterRef.current = master;
-
-    // ---- Engine oscillators ----
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 600;
-    filter.Q.value = 8;
-    filter.connect(master);
-    filterRef.current = filter;
-
-    const oscA = ctx.createOscillator();
-    oscA.type = 'sawtooth';
-    oscA.frequency.value = 70;
-    const gA = ctx.createGain();
-    gA.gain.value = 0.35;
-    oscA.connect(gA).connect(filter);
-    oscA.start();
-    oscARef.current = oscA;
-
-    const oscB = ctx.createOscillator();
-    oscB.type = 'sawtooth';
-    oscB.frequency.value = 105; // slight detune harmonic
-    oscB.detune.value = -8;
-    const gB = ctx.createGain();
-    gB.gain.value = 0.18;
-    oscB.connect(gB).connect(filter);
-    oscB.start();
-    oscBRef.current = oscB;
-
-    // ---- Noise / road rumble ----
-    const bufferSize = 2 * ctx.sampleRate;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const out = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) out[i] = Math.random() * 2 - 1;
-    const noise = ctx.createBufferSource();
-    noise.buffer = noiseBuffer;
-    noise.loop = true;
-    const noiseFilter = ctx.createBiquadFilter();
-    noiseFilter.type = 'lowpass';
-    noiseFilter.frequency.value = 220;
-    const noiseGain = ctx.createGain();
-    noiseGain.gain.value = 0.04;
-    noise.connect(noiseFilter).connect(noiseGain).connect(master);
-    noise.start();
-    noiseGainRef.current = noiseGain;
-
-    // Fade in master
-    master.gain.setTargetAtTime(0.18, ctx.currentTime, 0.6);
-
+    const a = new Audio(ENGINE_SRC);
+    a.loop = true;
+    a.preload = 'auto';
+    a.volume = 0;
+    audioRef.current = a;
     return () => {
       try {
-        oscA.stop();
-        oscB.stop();
-        noise.stop();
+        a.pause();
       } catch {}
-      try {
-        ctx.close();
-      } catch {}
+      audioRef.current = null;
     };
-  }, [enabled]);
-
-  // Mute toggle
-  useEffect(() => {
-    const m = masterRef.current;
-    const ctx = ctxRef.current;
-    if (!m || !ctx) return;
-    m.gain.cancelScheduledValues(ctx.currentTime);
-    m.gain.setTargetAtTime(muted ? 0 : 0.18, ctx.currentTime, 0.2);
-  }, [muted]);
+  }, []);
 
   // First-gesture activation
   useEffect(() => {
@@ -132,38 +57,46 @@ export default function CarsAudio() {
     };
   }, [enabled]);
 
-  // Drive engine pitch from scroll progress + velocity
+  // Start / stop playback when enabled / muted change
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (!enabled) {
+      a.pause();
+      return;
+    }
+    a.play().catch(() => {});
+    const target = muted ? 0 : 0.45;
+    const start = a.volume;
+    const t0 = performance.now();
+    const dur = 600;
+    let raf = 0;
+    const tick = () => {
+      const k = Math.min(1, (performance.now() - t0) / dur);
+      a.volume = start + (target - start) * k;
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(raf);
+  }, [enabled, muted]);
+
+  // Modulate playback rate from scroll progress + velocity for a rev feel
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
     const loop = () => {
       if (!alive) return;
-      const ctx = ctxRef.current;
-      const oscA = oscARef.current;
-      const oscB = oscBRef.current;
-      const filter = filterRef.current;
-      if (ctx && oscA && oscB && filter) {
+      const a = audioRef.current;
+      if (a && !a.paused) {
+        const progress = scrollRef.current;
         const now = performance.now();
         const dt = Math.max(1, now - (lastTimeRef.current || now)) / 1000;
-        const dp = Math.abs(progress - lastProgressRef.current) / dt; // scroll velocity 0..~5
+        const dp = Math.abs(progress - lastProgressRef.current) / dt;
         lastProgressRef.current = progress;
         lastTimeRef.current = now;
-
-        // Per-car pitch personality
-        const carIdx = Math.max(
-          0,
-          Math.min(CARS.length - 1, act - 1),
-        );
-        const baseHz = 60 + carIdx * 8 + progress * 30;
-        const revBoost = Math.min(1, dp * 4) * 90; // boost on fast scroll
-        const targetA = baseHz + revBoost;
-        const targetB = (baseHz + revBoost) * 1.5;
-        const targetCutoff = 380 + revBoost * 6 + progress * 600;
-
-        const t = ctx.currentTime;
-        oscA.frequency.setTargetAtTime(targetA, t, 0.15);
-        oscB.frequency.setTargetAtTime(targetB, t, 0.15);
-        filter.frequency.setTargetAtTime(targetCutoff, t, 0.2);
+        const target = 0.85 + progress * 0.25 + Math.min(0.5, dp * 1.4);
+        const cur = a.playbackRate;
+        a.playbackRate = cur + (target - cur) * 0.15;
       }
       rafRef.current = requestAnimationFrame(loop);
     };
@@ -172,35 +105,21 @@ export default function CarsAudio() {
       alive = false;
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
     };
-  }, [enabled, progress, act]);
+  }, [enabled]);
 
-  // Rev burst on act change
+  // Quick rev "blip" on act change — briefly bumps playback rate
   useEffect(() => {
     if (!enabled) return;
-    const ctx = ctxRef.current;
-    const master = masterRef.current;
-    if (!ctx || !master) return;
+    const a = audioRef.current;
+    if (!a) return;
     if (lastActRef.current === act) return;
     lastActRef.current = act;
-
-    // Quick whoosh-ish blip: sine swept up then down through a bandpass
-    const t0 = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = 800;
-    bp.Q.value = 2;
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(180, t0);
-    osc.frequency.exponentialRampToValueAtTime(540, t0 + 0.18);
-    osc.frequency.exponentialRampToValueAtTime(120, t0 + 0.65);
-    g.gain.setValueAtTime(0, t0);
-    g.gain.linearRampToValueAtTime(0.22, t0 + 0.06);
-    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.7);
-    osc.connect(bp).connect(g).connect(master);
-    osc.start(t0);
-    osc.stop(t0 + 0.75);
+    const original = a.playbackRate;
+    a.playbackRate = Math.min(2, original + 0.55);
+    const t = setTimeout(() => {
+      if (audioRef.current) audioRef.current.playbackRate = original;
+    }, 280);
+    return () => clearTimeout(t);
   }, [act, enabled]);
 
   return (

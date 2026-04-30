@@ -45,17 +45,17 @@ export default function ScrollProvider({
   useEffect(() => {
     scrollRef.total = total;
     const lenis = new Lenis({
-      duration: 1.05,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      // Snappier feel — the previous 1.05 made the page feel sticky.
+      duration: 0.6,
+      easing: (t) => 1 - Math.pow(1 - t, 3),
       smoothWheel: true,
-      wheelMultiplier: 1,
-      touchMultiplier: 1.2,
+      wheelMultiplier: 1.15,
+      touchMultiplier: 1.4,
     });
     lenisRef.current = lenis;
 
     let rafId = 0;
     let lastReactCommit = 0;
-    let lastReactProgress = -1;
     let lastReactAct = -1;
 
     function raf(time: number) {
@@ -68,14 +68,13 @@ export default function ScrollProvider({
       scrollRef.current = p;
       scrollRef.act = a;
 
-      // Throttle React state updates to ~30 Hz AND only when the value
-      // actually changes meaningfully. This is what fixes scroll jank —
-      // R3F components read from `scrollRef` directly and never re-render.
-      const dueByTime = time - lastReactCommit > 33;
-      const dueByDelta = Math.abs(p - lastReactProgress) > 0.0015 || a !== lastReactAct;
-      if (dueByTime && dueByDelta) {
+      // Only commit to React when the active *act* changes (rare event)
+      // or every ~250 ms as a safety net. We never commit `progress` —
+      // subscribers should read `scrollRef.current` from a rAF loop.
+      const dueByTime = time - lastReactCommit > 250;
+      const actChanged = a !== lastReactAct;
+      if (actChanged || dueByTime) {
         lastReactCommit = time;
-        lastReactProgress = p;
         lastReactAct = a;
         setProgress(p);
         setAct(a);

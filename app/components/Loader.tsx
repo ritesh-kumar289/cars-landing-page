@@ -7,20 +7,19 @@ import * as THREE from 'three';
 import { CARS } from '../lib/cars';
 
 /**
- * Loader — cinematic title card with a live, spinning 3D F1 model.
+ * Loader — clean, full-screen black card with the F1 3D model driving
+ * across the screen left → right. The loading percentage sits behind
+ * it so it reads like a number being "driven past" by the car.
  *
- *   - Always shows an SVG F1 silhouette so the user sees motion at 0 %
- *     (the GLB still has to download).
- *   - Pre-loads EVERY car GLB at module-parse time, so by the time the
- *     loader fades out the cars are ready and visible immediately.
- *   - Progress is driven by THREE.DefaultLoadingManager.
- *   - 14 s safety cap.
+ *  - No SVG silhouette, no vignette/background overlays.
+ *  - All car GLBs are preloaded at module-parse time, so the showcase
+ *    is ready as soon as the loader fades.
+ *  - Progress comes from `THREE.DefaultLoadingManager`, with a slow
+ *    ambient ramp + 14 s safety cap so the bar never sits stuck.
  */
 
-// Smallest GLB in the catalogue (5.3 MB) — fastest first paint.
 const HERO_MODEL = '/models/formula_1_generico_2.glb';
 
-// Kick off ALL the GLB downloads as early as possible.
 useGLTF.preload(HERO_MODEL);
 CARS.forEach((c) => useGLTF.preload(c.model));
 
@@ -35,7 +34,7 @@ function LoaderCar({ onReady }: { onReady?: () => void }) {
     box.getSize(size);
     const center = new THREE.Vector3();
     box.getCenter(center);
-    const targetH = 1.3;
+    const targetH = 1.4;
     const maxDim = Math.max(size.x, size.y, size.z) || 1;
     const s = targetH / maxDim;
     fitRef.current = { cx: center.x, cy: center.y, cz: center.z, s };
@@ -48,13 +47,18 @@ function LoaderCar({ onReady }: { onReady?: () => void }) {
     });
   }
 
+  // gentle bob + a touch of forward lean as it "drives"
   useFrame((_, dt) => {
     if (!ref.current) return;
-    ref.current.rotation.y += dt * 0.85;
-    ref.current.rotation.x = Math.sin(performance.now() * 0.0008) * 0.06;
+    ref.current.rotation.y = -Math.PI / 2 + Math.sin(performance.now() * 0.0015) * 0.06;
+    ref.current.position.y =
+      -fitRef.current!.cy * fitRef.current!.s -
+      0.05 +
+      Math.sin(performance.now() * 0.006) * 0.02;
+    ref.current.rotation.z = Math.sin(performance.now() * 0.005) * 0.02;
+    void dt;
   });
 
-  // Fire onReady once the GLTF has resolved and we're inside the frame loop.
   useEffect(() => {
     onReady?.();
   }, [onReady]);
@@ -63,7 +67,7 @@ function LoaderCar({ onReady }: { onReady?: () => void }) {
   return (
     <group
       ref={ref}
-      position={[-f.cx * f.s, -f.cy * f.s - 0.15, -f.cz * f.s]}
+      position={[-f.cx * f.s, -f.cy * f.s - 0.05, -f.cz * f.s]}
       scale={f.s}
     >
       <primitive object={scene} />
@@ -76,10 +80,16 @@ export default function Loader() {
   const [done, setDone] = useState(false);
   const [hide, setHide] = useState(false);
   const [carReady, setCarReady] = useState(false);
+  const carWrapRef = useRef<HTMLDivElement | null>(null);
 
-  // Probe the loader's hero GLB so we can hide the SVG silhouette as soon
-  // as the real 3D model is ready, without waiting for *all* cars.
-  // Tracked via the LoaderCar's mount callback below.
+  // Drive the car wrapper position from progress via the DOM (avoids
+  // re-rendering the whole loader at 60 fps).
+  useEffect(() => {
+    if (!carWrapRef.current) return;
+    // Map 0..100 → -42vw..+42vw
+    const t = Math.min(1, Math.max(0, progress / 100));
+    carWrapRef.current.style.transform = `translateX(${(t - 0.5) * 84}vw)`;
+  }, [progress]);
 
   useEffect(() => {
     const mgr = THREE.DefaultLoadingManager;
@@ -89,7 +99,7 @@ export default function Loader() {
     };
     const onLoad = () => {
       setProgress(100);
-      setTimeout(() => setDone(true), 450);
+      setTimeout(() => setDone(true), 500);
     };
     const onError = () => {
       setProgress((p) => Math.min(99, p + 4));
@@ -98,15 +108,13 @@ export default function Loader() {
     mgr.onLoad = onLoad;
     mgr.onError = onError;
 
-    // Slow ambient ramp so the bar never sits stuck.
     let raf = 0;
     const tick = () => {
-      setProgress((p) => (p < 90 ? p + (90 - p) * 0.006 : p));
+      setProgress((p) => (p < 92 ? p + (92 - p) * 0.008 : p));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
 
-    // Hard cap so the loader always resolves.
     const hardTimeout = setTimeout(() => {
       setProgress(100);
       setDone(true);
@@ -121,7 +129,6 @@ export default function Loader() {
     };
   }, []);
 
-  // Unmount fully after fade so we stop holding a Canvas instance.
   useEffect(() => {
     if (!done) return;
     const t = setTimeout(() => setHide(true), 900);
@@ -130,78 +137,72 @@ export default function Loader() {
 
   if (hide) return null;
 
+  const pct = Math.floor(progress);
+
   return (
     <div
-      className="fixed inset-0 z-[150] flex flex-col items-center justify-center bg-ink transition-opacity duration-700"
+      className="fixed inset-0 z-[150] bg-ink overflow-hidden transition-opacity duration-700"
       style={{ opacity: done ? 0 : 1, pointerEvents: done ? 'none' : 'auto' }}
     >
-      <div className="relative w-[min(80vw,560px)] h-[min(42vh,320px)]">
-        {/* Always-on SVG silhouette so the user sees motion at 0 %. */}
+      {/* HUGE percentage that lives BEHIND the car */}
+      <div
+        className="pointer-events-none absolute inset-0 flex items-center justify-center select-none"
+        aria-hidden
+      >
         <div
-          className="pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity duration-500"
-          style={{ opacity: carReady ? 0 : 0.6 }}
-        >
-          <svg
-            viewBox="0 0 256 80"
-            className="w-[70%] max-w-[420px]"
-            style={{ animation: 'spinSlow 2.4s linear infinite' }}
-            fill="none"
-            stroke="#ff3b1f"
-            strokeWidth="1.5"
-          >
-            <path d="M8 56 L40 56 L48 40 L72 36 L96 22 L132 18 L172 22 L196 30 L228 36 L248 40 L248 56 L220 56" strokeLinecap="round" />
-            <circle cx="56" cy="60" r="14" />
-            <circle cx="200" cy="60" r="14" />
-            <circle cx="56" cy="60" r="6" />
-            <circle cx="200" cy="60" r="6" />
-            <path d="M84 22 L120 6 L156 6 L172 22" strokeLinecap="round" />
-            <path d="M132 6 L132 22" />
-          </svg>
-        </div>
-
-        {/* Real 3D F1 — fades in once it's downloaded. */}
-        <div
-          className="absolute inset-0 transition-opacity duration-700"
-          style={{ opacity: carReady ? 1 : 0 }}
-        >
-          <Canvas
-            camera={{ position: [2.6, 1.2, 3.4], fov: 28, near: 0.1, far: 30 }}
-            gl={{ alpha: true, antialias: true }}
-            dpr={[1, 1.5]}
-          >
-            <color attach="background" args={['#050505']} />
-            <ambientLight intensity={0.4} />
-            <directionalLight position={[3, 4, 2]} intensity={2.4} color="#ffe8c2" />
-            <directionalLight position={[-4, 2, -2]} intensity={1.6} color="#7dd3fc" />
-            <pointLight position={[0, -1, 2]} intensity={1.2} color="#ff3b1f" />
-            <Suspense fallback={null}>
-              <Environment preset="warehouse" environmentIntensity={0.6} />
-              <LoaderCar onReady={() => setCarReady(true)} />
-            </Suspense>
-          </Canvas>
-        </div>
-
-        <div
-          className="pointer-events-none absolute inset-0"
+          className="display text-bone/10 leading-none tracking-tighter font-bold"
           style={{
-            background:
-              'radial-gradient(closest-side, transparent 55%, rgba(0,0,0,0.65) 100%)',
+            fontSize: 'min(56vw, 56vh)',
+            transition: 'opacity 0.3s ease',
           }}
-        />
+        >
+          {String(pct).padStart(3, '0')}
+        </div>
       </div>
 
-      <div className="smallcaps text-bone/60 mt-2 mb-3">Loading reel</div>
-      <div className="display text-bone text-5xl md:text-7xl mb-5 animate-flicker">
-        OFF<em>TRACKS</em>
+      {/* The F1 — translated left → right by progress, in front of % */}
+      <div
+        ref={carWrapRef}
+        className="absolute inset-0 will-change-transform"
+        style={{
+          transform: 'translateX(-42vw)',
+          transition: 'transform 0.25s linear',
+          opacity: carReady ? 1 : 0,
+          transitionProperty: 'transform, opacity',
+          transitionDuration: '0.25s, 0.7s',
+        }}
+      >
+        <Canvas
+          camera={{ position: [0, 0.6, 3.4], fov: 30, near: 0.1, far: 30 }}
+          gl={{ alpha: true, antialias: true }}
+          dpr={[1, 1.5]}
+          style={{ background: 'transparent' }}
+        >
+          <ambientLight intensity={0.45} />
+          <directionalLight position={[3, 4, 2]} intensity={2.4} color="#ffe8c2" />
+          <directionalLight position={[-4, 2, -2]} intensity={1.6} color="#7dd3fc" />
+          <pointLight position={[0, -1, 2]} intensity={1.2} color="#ff3b1f" />
+          <Suspense fallback={null}>
+            <Environment preset="warehouse" environmentIntensity={0.6} />
+            <LoaderCar onReady={() => setCarReady(true)} />
+          </Suspense>
+        </Canvas>
       </div>
-      <div className="w-64 md:w-96 h-px bg-white/15 relative overflow-hidden">
-        <div
-          className="absolute inset-y-0 left-0 bg-ember"
-          style={{ width: `${progress}%`, transition: 'width 0.18s linear' }}
-        />
-      </div>
-      <div className="mt-3 smallcaps text-bone/40 font-mono">
-        {progress.toFixed(0).padStart(3, '0')} / 100 · ASSETS
+
+      {/* Brand mark + thin progress line, anchored to bottom */}
+      <div className="absolute inset-x-0 bottom-[12vh] flex flex-col items-center gap-4">
+        <div className="display text-bone text-3xl md:text-5xl animate-flicker">
+          OFF<em>TRACKS</em>
+        </div>
+        <div className="w-64 md:w-96 h-px bg-white/15 relative overflow-hidden">
+          <div
+            className="absolute inset-y-0 left-0 bg-ember"
+            style={{ width: `${progress}%`, transition: 'width 0.18s linear' }}
+          />
+        </div>
+        <div className="smallcaps text-bone/40 font-mono">
+          {String(pct).padStart(3, '0')} / 100 · ASSETS
+        </div>
       </div>
     </div>
   );
