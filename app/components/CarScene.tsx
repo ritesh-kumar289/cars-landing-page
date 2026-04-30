@@ -38,10 +38,10 @@ const IDLE_ROTATION_SPEED = 0.08;
 /** Visibility window size (in act-progress units) for the first car's left
  *  extension into the hero section. Wider so W13 is partially visible at p=0
  *  without shifting its peak away from its own act (p=1). */
-const W13_LEFT_WINDOW_SIZE = 1.6;
-/** Symmetric visibility window for all other cars. Wider than 1.0 means cars
- *  overlap during transitions, producing a true crossfade instead of a pop. */
-const DEFAULT_WINDOW_SIZE = 1.15;
+const W13_LEFT_WINDOW_SIZE = 1.4;
+/** Symmetric visibility window for all other cars. Tighter (< 1.0) so cars
+ *  finish exiting before the next one arrives — prevents on-screen overlap. */
+const DEFAULT_WINDOW_SIZE = 0.85;
 
 /** Smoothly interpolate a value with critical damping. */
 function damp(current: number, target: number, lambda: number, dt: number) {
@@ -253,6 +253,9 @@ function CarModelDriven({
   groupRef: () => THREE.Group | undefined;
 }) {
   const { scene } = useGLTF(url);
+  // Clone for safety under React strict mode (dev double-mount) — the
+  // base `scene` is shared across re-mounts, and a primitive can't be
+  // attached to two parents at once.
   const cloned = useMemo(() => scene.clone(true), [scene]);
   const ref = useRef<THREE.Group>(null);
 
@@ -298,6 +301,15 @@ function CarModelDriven({
 
     ref.current.userData.v = damp(ref.current.userData.v ?? 0, targetV, 4, dt);
     const v = ref.current.userData.v;
+
+    // Early-out: when the car is fully off-screen and not approaching,
+    // skip every per-frame computation. With 12 cars this turns ~12 frame
+    // workloads into ~2 (active + neighbor), which is the single biggest
+    // win for fast-scroll smoothness.
+    if (targetV < 0.01 && v < 0.01) {
+      ref.current.visible = false;
+      return;
+    }
     // Keep cars at full scale — the visibility crossfade is handled by
     // movement + opacity (via lights), not by scaling them down (which
     // made them appear to "shrink into the floor").
@@ -317,7 +329,6 @@ function CarModelDriven({
     // don't flick on entry.
     const driveSpin =
       signedDist > 0 ? (1 - v) * Math.min(1, signedDist) * 0.3 : 0;
-
     if (isFront) {
       if (!dragState.active) {
         dragState.yaw += dragState.vel * dt;
@@ -348,17 +359,19 @@ function CarModelDriven({
     ref.current.rotation.z = -driveSpin * 0.2;
 
     // ====== Drive-off transition along the car's facing direction ======
-    // Forward vector for the car's current yaw (around Y). When fading
-    // out, the car drives forward off-screen; when fading in, it
-    // approaches from the opposite side. This makes transitions feel
-    // like the previous car drove away in the direction it was facing.
+    // Forward vector for the car's current yaw (around Y). Outgoing cars
+    // accelerate off-screen quickly; incoming cars stage from far ahead
+    // and arrive only when fully visible. The asymmetric distances are
+    // what guarantees no on-screen overlap between adjacent cars.
     const yaw = ref.current.userData.yaw as number;
     tmpForward.current.set(Math.sin(yaw), 0, Math.cos(yaw));
-    // Quadratic ease so the car accelerates as it leaves (and
-    // decelerates as it arrives). signedDist sign chooses direction:
-    //   signedDist < 0  → previous car: drive forward and exit
-    //   signedDist > 0  → next car: arrive from in-front of its motion
-    const driveDist = signedDist * 6 * (1 - v) * (1 - v);
+    // Cubic out for outgoing (exits fast), cubic in for incoming
+    // (stays far away until last moment). 12 units is enough to clear
+    // any car footprint at scale 1.6.
+    const fadeOut = 1 - v;
+    const exitDist = signedDist < 0 ? signedDist * 12 * fadeOut : 0;
+    const enterDist = signedDist > 0 ? signedDist * 12 * fadeOut * fadeOut : 0;
+    const driveDist = exitDist + enterDist;
     const targetX = tmpForward.current.x * driveDist;
     const targetZ = tmpForward.current.z * driveDist;
 
@@ -389,22 +402,30 @@ function CarModelDriven({
     const groundY = -0.69 + yOffset * 0.1; // small per-car artistic adjustment
     const bottomLocal = -fit.bottomFromCenter * scale * fit.fitScale;
     const restingY = groundY - bottomLocal;
-    ref.current.position.x = -fit.center.x * scale * fit.fitScale + ref.current.userData.tx;
+    // Position the OUTER group at the (translated) world location.
+    // Centering offsets are applied to the inner group below, so this
+    // group rotates cleanly around the car's bbox center — critical for
+    // models like the Mustang whose origin sits far from their geometry
+    // (otherwise they orbit in a wide arc as yaw changes).
+    ref.current.position.x = ref.current.userData.tx;
     ref.current.position.y = restingY;
-    ref.current.position.z = -fit.center.z * scale * fit.fitScale + ref.current.userData.tz;
+    ref.current.position.z = ref.current.userData.tz;
   });
 
+  const centerOffset = useMemo<[number, number, number]>(
+    () => [
+      -fit.center.x * scale * fit.fitScale,
+      -fit.center.y * scale * fit.fitScale,
+      -fit.center.z * scale * fit.fitScale,
+    ],
+    [fit, scale],
+  );
+
   return (
-    <group
-      ref={ref}
-      position={[
-        -fit.center.x * scale * fit.fitScale,
-        yOffset - fit.center.y * scale * fit.fitScale,
-        -fit.center.z * scale * fit.fitScale,
-      ]}
-      rotation={[0, rotationY, 0]}
-    >
-      <primitive object={cloned} />
+    <group ref={ref} rotation={[0, rotationY, 0]}>
+      <group position={centerOffset}>
+        <primitive object={cloned} />
+      </group>
     </group>
   );
 }
@@ -423,9 +444,18 @@ function CinematicLightsDriven({
   const rimRef = useRef<THREE.DirectionalLight>(null);
   const fillRef = useRef<THREE.PointLight>(null);
   const bounceRef = useRef<THREE.PointLight>(null);
+  const groupContainer = useRef<THREE.Group>(null);
 
   useFrame(() => {
     const v = (groupRef()?.userData.v as number | undefined) ?? 0;
+    // Fully cull off-screen lights: directional + point lights still cost
+    // shadow / illumination calc each frame even at intensity 0. Toggling
+    // visibility is the cheap opt-out.
+    const visible = v > 0.005;
+    if (groupContainer.current && groupContainer.current.visible !== visible) {
+      groupContainer.current.visible = visible;
+    }
+    if (!visible) return;
     if (ambRef.current) ambRef.current.intensity = 0.18 * v;
     if (keyRef.current) keyRef.current.intensity = 2.4 * v;
     if (rimRef.current) rimRef.current.intensity = 3.0 * v;
@@ -434,7 +464,7 @@ function CinematicLightsDriven({
   });
 
   return (
-    <>
+    <group ref={groupContainer} visible={false}>
       <ambientLight ref={ambRef} intensity={0} />
       <directionalLight
         ref={keyRef}
@@ -448,7 +478,7 @@ function CinematicLightsDriven({
       <directionalLight ref={rimRef} position={[-6, 4, -4]} intensity={0} color={rim} />
       <pointLight ref={fillRef} position={[0, 1.2, 4]} intensity={0} color={fill} distance={12} />
       <pointLight ref={bounceRef} position={[0, -0.3, 0]} intensity={0} color={rim} distance={6} />
-    </>
+    </group>
   );
 }
 
@@ -493,12 +523,12 @@ function Effects() {
   return (
     <EffectComposer multisampling={0} enableNormalPass={false}>
       <Bloom
-        intensity={0.6}
-        luminanceThreshold={0.7}
+        intensity={0.45}
+        luminanceThreshold={0.78}
         luminanceSmoothing={0.2}
         mipmapBlur
       />
-      <Vignette eskil={false} offset={0.25} darkness={0.78} />
+      <Vignette eskil={false} offset={0.3} darkness={0.7} />
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
     </EffectComposer>
   );
@@ -563,8 +593,8 @@ export default function CarScene() {
       frameloop="always"
     >
       <PerformanceMonitor
-        onIncline={() => setDpr((d) => Math.min(1.5, d + 0.25))}
-        onDecline={() => setDpr((d) => Math.max(0.85, d - 0.25))}
+        onIncline={() => setDpr((d) => Math.min(1.25, d + 0.25))}
+        onDecline={() => setDpr((d) => Math.max(0.7, d - 0.25))}
       />
       <color attach="background" args={['#050505']} />
       <fog attach="fog" args={['#050505', 8, 22]} />

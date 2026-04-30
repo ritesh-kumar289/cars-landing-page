@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useGLTF } from '@react-three/drei';
-import * as THREE from 'three';
 import { CARS } from '../lib/cars';
 
 /**
@@ -37,40 +36,54 @@ export default function Loader() {
   }, [progress]);
 
   useEffect(() => {
-    const mgr = THREE.DefaultLoadingManager;
-    const onProgress = (_: string, loaded: number, total: number) => {
-      const pct = Math.min(99, (loaded / Math.max(1, total)) * 100);
+    // Explicit per-URL completion tracking — the THREE DefaultLoadingManager
+    // can fire `onLoad` prematurely when one batch finishes before the next
+    // registers, causing the loader to flash 100% while other models are
+    // still downloading. We instead fetch each model URL ourselves with
+    // `Cache.add` so the browser caches the bytes and we know exactly when
+    // every car is in cache.
+    const expected = CARS.map((c) => c.model);
+    let cancelled = false;
+    let loaded = 0;
+
+    const update = () => {
+      if (cancelled) return;
+      const pct = (loaded / expected.length) * 100;
       setProgress((p) => Math.max(p, pct));
+      if (loaded >= expected.length) {
+        setProgress(100);
+        setTimeout(() => !cancelled && setDone(true), 350);
+      }
     };
-    const onLoad = () => {
-      setProgress(100);
-      setTimeout(() => setDone(true), 450);
-    };
-    const onError = () => {
-      setProgress((p) => Math.min(99, p + 4));
-    };
-    mgr.onProgress = onProgress;
-    mgr.onLoad = onLoad;
-    mgr.onError = onError;
 
-    let raf = 0;
-    const tick = () => {
-      setProgress((p) => (p < 92 ? p + (92 - p) * 0.012 : p));
-      raf = requestAnimationFrame(tick);
+    const fetchOne = async (url: string) => {
+      try {
+        // Prime the HTTP cache. r3f's GLTFLoader will then read from cache
+        // (instant) so the showcase is hot the moment the loader fades.
+        const r = await fetch(url, { cache: 'force-cache' });
+        await r.arrayBuffer();
+      } catch {
+        // ignore — count as loaded so we don't deadlock the UI
+      } finally {
+        if (!cancelled) {
+          loaded += 1;
+          update();
+        }
+      }
     };
-    raf = requestAnimationFrame(tick);
 
+    expected.forEach(fetchOne);
+
+    // Hard timeout safety net — never strand the user if a slow CDN drags
     const hardTimeout = setTimeout(() => {
+      if (cancelled) return;
       setProgress(100);
       setDone(true);
-    }, 12000);
+    }, 30000);
 
     return () => {
-      cancelAnimationFrame(raf);
+      cancelled = true;
       clearTimeout(hardTimeout);
-      mgr.onProgress = () => undefined;
-      mgr.onLoad = () => undefined;
-      mgr.onError = () => undefined;
     };
   }, []);
 
