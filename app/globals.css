@@ -42,7 +42,7 @@ html.lenis body {
   overflow: hidden;
 }
 
-/* Film grain */
+/* Film grain — on its own div so ::before doesn't conflict with scanlines */
 .grain::before {
   content: '';
   position: fixed;
@@ -64,8 +64,8 @@ html.lenis body {
   100% { transform: translate(0, 0); }
 }
 
-/* Vignette */
-.vignette::after {
+/* Vignette — on its own div */
+.vignette::before {
   content: '';
   position: fixed;
   inset: 0;
@@ -77,7 +77,7 @@ html.lenis body {
     rgba(0, 0, 0, 0.85) 100%);
 }
 
-/* Scanline overlay (subtle, cinematic) */
+/* Scanline overlay — on its own div */
 .scanlines::before {
   content: '';
   position: fixed;

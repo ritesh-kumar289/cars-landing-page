@@ -240,12 +240,15 @@ function ActiveCar() {
   return (
     <>
       {CARS.map((c, i) => {
-        const center = i + 1; // hero is 0
-        // Visibility window: ~ ±0.6 around its act center
-        const dist = Math.abs(p - center);
-        const v = Math.max(0, 1 - dist / 0.65);
+        const center = i + 1; // hero is act 0, car[0] is act 1
+        // Visibility window centred on each car's act.
+        // Hero (p≈0): we nudge car[0] to be partially visible so the hero
+        // isn't a blank black screen. We treat act -0.4 as the hero entry.
+        const heroBoost = i === 0 ? 0.4 : 0; // pull W13 into the hero frame
+        const dist = Math.abs(p - (center - heroBoost));
+        const v = Math.max(0, 1 - dist / 0.75);
         return (
-          <group key={c.id} visible={v > 0.02}>
+          <group key={c.id} visible={v > 0.01}>
             <Float speed={0.8} rotationIntensity={0.05} floatIntensity={0.25}>
               <CarModel
                 url={c.model}
@@ -327,6 +330,8 @@ export default function CarScene() {
 
       <Suspense fallback={null}>
         <Environment preset="warehouse" environmentIntensity={0.55} />
+        {/* Always-on ambient so the hero isn't pitch black */}
+        <ambientLight intensity={0.12} color="#7dd3fc" />
         <ActiveStage />
         <ActiveCar />
         <Director />

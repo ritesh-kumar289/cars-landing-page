@@ -7,6 +7,7 @@ import HUD from './components/HUD';
 import Sections from './components/Sections';
 import Loader from './components/Loader';
 import CustomCursor from './components/CustomCursor';
+import SceneErrorBoundary from './components/SceneErrorBoundary';
 
 // 3D scene must be client-side only (uses WebGL/Three)
 const CarScene = dynamic(() => import('./components/CarScene'), {
@@ -19,7 +20,9 @@ export default function Page() {
     <ScrollProvider total={TOTAL_ACTS}>
       <Loader />
       <CustomCursor />
-      <CarScene />
+      <SceneErrorBoundary>
+        <CarScene />
+      </SceneErrorBoundary>
       <HUD />
       <Sections />
     </ScrollProvider>

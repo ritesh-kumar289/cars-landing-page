@@ -26,7 +26,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="grain vignette scanlines">{children}</body>
+      <body>
+        {/* Layered cinematic overlays — each on its own element to avoid
+            the ::before / ::after pseudo-element conflict when multiple
+            overlay classes are stacked on the same node. */}
+        <div className="grain" aria-hidden="true" />
+        <div className="vignette" aria-hidden="true" />
+        <div className="scanlines" aria-hidden="true" />
+        {children}
+      </body>
     </html>
   );
 }

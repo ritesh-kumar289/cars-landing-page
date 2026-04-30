@@ -12,7 +12,6 @@ export default function Loader() {
     let stalled = 0;
 
     const tick = () => {
-      // Asymptotic loader to 90% while images/models stream, then snap to 100 on load
       p = p + (90 - p) * 0.02;
       setProgress(p);
       stalled++;
@@ -24,20 +23,26 @@ export default function Loader() {
       cancelAnimationFrame(raf);
       let v = p;
       const finish = () => {
-        v += 4;
+        v += 5;
         setProgress(Math.min(100, v));
         if (v < 100) requestAnimationFrame(finish);
-        else setTimeout(() => setDone(true), 500);
+        else setTimeout(() => setDone(true), 400);
       };
       finish();
     };
+
+    // Hard max timeout — loader ALWAYS resolves within 10 s
+    const hardTimeout = setTimeout(onReady, 10_000);
 
     if (document.readyState === 'complete') {
       setTimeout(onReady, 1200);
     } else {
       window.addEventListener('load', () => setTimeout(onReady, 800));
     }
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(hardTimeout);
+    };
   }, []);
 
   return (
