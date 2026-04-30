@@ -126,8 +126,8 @@ export const ACTS: Act[] = [
   {
     id: 'hero',
     index: 0,
-    title: 'OFFFINDS',
-    subtitle: 'Curated rare finds. Driven obsessions.',
+    title: 'OFF TRACKS',
+    subtitle: 'Off the tracks. Driven obsessions.',
     body: 'A private collection of machines that should not exist — and the films we shoot about them. Scroll to enter.',
     meta: [
       { label: 'Reel', value: 'No. 07' },
@@ -153,9 +153,9 @@ export const ACTS: Act[] = [
     index: CARS.length + 1,
     title: 'End of reel.',
     subtitle: 'Find what others can\u2019t.',
-    body: 'OFFFINDS sources, documents, and films one-of-one machines for collectors who treat speed as a language. Request access to the next reel.',
+    body: 'OFF TRACKS sources, documents, and films one-of-one machines for collectors who treat speed as a language. Request access to the next reel.',
     meta: [
-      { label: 'Direction', value: 'OFFFINDS Studio' },
+      { label: 'Direction', value: 'OFF TRACKS Studio' },
       { label: 'Score', value: 'Original' },
       { label: 'Stock', value: 'Kodak 5219' },
     ],

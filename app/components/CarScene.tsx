@@ -219,6 +219,14 @@ function Director() {
     posTmp.current.x += Math.sin(time * 0.7) * 0.04;
     posTmp.current.y += Math.cos(time * 0.55) * 0.03;
 
+    // Interactive mouse parallax — cursor pushes the camera around the subject
+    const mx = state.pointer.x;
+    const my = state.pointer.y;
+    posTmp.current.x += mx * 0.9;
+    posTmp.current.y += my * 0.45;
+    lookAtTmp.current.x += mx * 0.15;
+    lookAtTmp.current.y += my * 0.08;
+
     camera.position.x = damp(camera.position.x, posTmp.current.x, 4, dt);
     camera.position.y = damp(camera.position.y, posTmp.current.y, 4, dt);
     camera.position.z = damp(camera.position.z, posTmp.current.z, 4, dt);

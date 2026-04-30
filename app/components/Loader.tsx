@@ -53,7 +53,7 @@ export default function Loader() {
       >
         <div className="smallcaps text-bone/60 mb-4">Loading reel</div>
         <div className="display text-bone text-5xl md:text-7xl mb-6 animate-flicker">
-          OFF<em>FINDS</em>
+          OFF<em>TRACKS</em>
         </div>
         <div className="w-64 md:w-96 h-px bg-white/15 relative overflow-hidden">
           <div

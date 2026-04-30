@@ -1,5 +1,5 @@
 {
-  "name": "offfinds-cars-landing",
+  "name": "off-tracks-cars-landing",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,21 +9,21 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@react-three/drei": "9.114.0",
-    "@react-three/fiber": "8.17.10",
-    "@react-three/postprocessing": "2.16.3",
+    "@react-three/drei": "^10.0.0",
+    "@react-three/fiber": "^9.0.0",
+    "@react-three/postprocessing": "^3.0.4",
     "gsap": "3.12.5",
     "lenis": "1.1.16",
     "next": "15.5.15",
     "postprocessing": "6.37.7",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "three": "0.169.0"
   },
   "devDependencies": {
     "@types/node": "20.16.11",
-    "@types/react": "18.3.11",
-    "@types/react-dom": "18.3.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@types/three": "0.169.0",
     "autoprefixer": "10.4.20",
     "eslint": "8.57.1",

@@ -2,12 +2,12 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
-  title: 'OFFFINDS — Reel 07 · Curated rare finds',
+  title: 'OFF TRACKS — Reel 07 · Curated rare tracks',
   description:
-    'A 3D immersive cinematic reel by OFFFINDS. Curated rare cars filmed in 70mm. Scroll to enter.',
+    'A 3D immersive cinematic reel by OFF TRACKS. Curated rare cars filmed in 70mm. Scroll to enter.',
   openGraph: {
-    title: 'OFFFINDS — Reel 07',
-    description: 'Curated rare finds. Driven obsessions.',
+    title: 'OFF TRACKS — Reel 07',
+    description: 'Off the tracks. Driven obsessions.',
     type: 'website',
   },
 };

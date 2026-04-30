@@ -29,10 +29,10 @@ export default function Sections() {
                 <div className="max-w-5xl">
                   <div className="smallcaps text-bone/60 mb-4 flex items-center gap-3">
                     <span className="inline-block w-10 h-px bg-ember" />
-                    A film by OFFFINDS — Reel 07
+                    A film by OFF TRACKS — Reel 07
                   </div>
                   <h1 className="display text-bone text-[clamp(3.5rem,12vw,11rem)]">
-                    OFF<em>FINDS</em>
+                    OFF<em>TRACKS</em>
                   </h1>
                   <p className="display italic text-bone/80 text-[clamp(1.4rem,2.6vw,2.4rem)] mt-2 max-w-3xl">
                     {a.subtitle}
@@ -123,10 +123,10 @@ export default function Sections() {
 
       {/* Footer ribbon */}
       <div id="story" className="relative z-10">
-        <Marquee text="OFFFINDS · CURATED RARE FINDS · REEL 07 · 2025 · DIRECTED IN 70MM" />
+        <Marquee text="OFF TRACKS · CURATED RARE TRACKS · REEL 07 · 2025 · DIRECTED IN 70MM" />
       </div>
       <footer className="relative z-10 px-6 md:px-10 py-10 text-bone/50 smallcaps flex flex-col md:flex-row items-center justify-between gap-4 border-t border-white/10">
-        <div>© {new Date().getFullYear()} OFFFINDS Studio</div>
+        <div>© {new Date().getFullYear()} OFF TRACKS Studio</div>
         <div className="font-mono">Cinematography · Cars · Cult Objects</div>
         <div>Made for collectors · Built for speed</div>
       </footer>

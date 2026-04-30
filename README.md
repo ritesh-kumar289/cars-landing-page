@@ -1,16 +1,16 @@
-# OFFFINDS · Reel 07 — 3D Immersive Cars Landing Page
+﻿# OFF TRACKS Â· Reel 07 â€” 3D Immersive Cars Landing Page
 
-A cinematic, scroll-driven, 3D immersive landing page in the spirit of **OFFFINDS** ("curated rare finds. driven obsessions."), shot as a film reel and rendered live in WebGL with the included car GLB / glTF models.
+A cinematic, scroll-driven, 3D immersive landing page in the spirit of **OFF TRACKS** ("curated rare finds. driven obsessions."), shot as a film reel and rendered live in WebGL with the included car GLB / glTF models.
 
 > Built with Next.js 15 (App Router) + React Three Fiber + drei + postprocessing + Lenis smooth-scroll, deploy-ready on Vercel.
 
-## ✦ The reel
+## âœ¦ The reel
 
 The page is structured as a film with **acts**, driven by scroll position:
 
 | Act | Beat | Subject |
 |-----|------|---------|
-| 00  | Title sequence | OFFFINDS — Reel 07 |
+| 00  | Title sequence | OFF TRACKS â€” Reel 07 |
 | 01  | Mercedes W13 (silver arrows, low-key) |
 | 02  | Ferrari F40 (twin-turbo, naked carbon) |
 | 03  | McLaren MP4 (papaya streak) |
@@ -27,7 +27,7 @@ Each act has its own:
 - copy block (director's notes)
 - meta strip (origin, era, class)
 
-## ✦ Cinematic effects
+## âœ¦ Cinematic effects
 
 - Bloom (specular highlights blown out like a film print)
 - Chromatic aberration (subtle 70mm prism fringe)
@@ -40,7 +40,7 @@ Each act has its own:
 - Lenis smooth-scroll
 - Auto-degrading DPR (drei `PerformanceMonitor`) for mobile
 
-## ✦ Local dev
+## âœ¦ Local dev
 
 ```bash
 npm install
@@ -48,25 +48,25 @@ npm run dev      # http://localhost:3000
 npm run build && npm start
 ```
 
-## ✦ Deploy on Vercel
+## âœ¦ Deploy on Vercel
 
 Two ways:
 
-### Option A — Git
+### Option A â€” Git
 1. Push this repo to GitHub (already connected: `ritesh-kumar289/cars-landing-page`).
-2. Go to [vercel.com/new](https://vercel.com/new), pick the repo, accept defaults — Next.js is auto-detected via `vercel.json`.
+2. Go to [vercel.com/new](https://vercel.com/new), pick the repo, accept defaults â€” Next.js is auto-detected via `vercel.json`.
 3. Click **Deploy**.
 
-### Option B — CLI
+### Option B â€” CLI
 ```bash
 npm i -g vercel
 vercel       # link/create project
 vercel --prod
 ```
 
-That's it — no env vars required.
+That's it â€” no env vars required.
 
-## ✦ Project layout
+## âœ¦ Project layout
 
 ```
 app/
@@ -74,10 +74,10 @@ app/
   page.tsx
   globals.css
   components/
-    CarScene.tsx     # the 3D film — Director, ActiveCar, Stage, Effects
+    CarScene.tsx     # the 3D film â€” Director, ActiveCar, Stage, Effects
     Sections.tsx     # HTML overlay acts (hero, cars, credits)
     HUD.tsx          # top nav, side rail, timecode, progress
-    Loader.tsx       # OFFFINDS title-card preloader
+    Loader.tsx       # OFF TRACKS title-card preloader
     CustomCursor.tsx # magnetic dot + ring (mix-blend-difference)
     Marquee.tsx
   lib/
@@ -92,17 +92,19 @@ public/models/
   ferrari_f40/scene.gltf      (+ scene.bin)
 ```
 
-## ✦ Performance notes
+## âœ¦ Performance notes
 
 The total weight of the 3D models is ~70 MB. On first load:
 - Loader title-card hides this behind a progress animation.
 - All models are preloaded once via `useGLTF.preload`.
 - Scene auto-fits each model to a unit height so individual GLB scales don't matter.
-- DPR auto-throttles 1.0–2.0 based on FPS; heavy effects (DOF) skip on low DPR.
+- DPR auto-throttles 1.0â€“2.0 based on FPS; heavy effects (DOF) skip on low DPR.
 - `prefers-reduced-motion` disables postprocessing.
 
 If you serve from a slow region, consider hosting the GLBs on a CDN or running them through `gltf-pipeline -d -t` for Draco + texture compression.
 
-## ✦ Credits
+## âœ¦ Credits
 
-3D models are bundled by the repo owner and remain under their original Sketchfab licenses (see `license.txt` inside each model folder). All UI/code in this repo is original work for the OFFFINDS reel.
+3D models are bundled by the repo owner and remain under their original Sketchfab licenses (see `license.txt` inside each model folder). All UI/code in this repo is original work for the OFF TRACKS reel.
+
+

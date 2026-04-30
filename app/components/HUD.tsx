@@ -11,7 +11,7 @@ export default function HUD() {
       {/* Top bar */}
       <header className="fixed top-0 inset-x-0 z-40 px-6 md:px-10 pt-6 flex items-center justify-between mix-blend-difference text-bone">
         <a href="#" className="display text-2xl tracking-tight">
-          OFF<em>FINDS</em>
+          OFF<em>TRACKS</em>
         </a>
         <nav className="hidden md:flex items-center gap-8 smallcaps">
           <a href="#collection" className="hover:text-ember transition">Collection</a>
