@@ -45,13 +45,13 @@ export default function ScrollProvider({
   useEffect(() => {
     scrollRef.total = total;
     const lenis = new Lenis({
-      // Higher lerp = snappier response on fast wheel flicks. With heavy
-      // 3D work behind the scroll, anything below 0.18 felt sticky during
-      // multi-flick scrolls.
+      // Slower wheel multiplier so each click of the wheel scrolls less,
+      // pairing with the doubled section height to give cars long,
+      // breathable scenes. Lerp 0.12 keeps motion silky without lag.
       smoothWheel: true,
-      wheelMultiplier: 1.3,
-      touchMultiplier: 1.8,
-      lerp: 0.2,
+      wheelMultiplier: 0.85,
+      touchMultiplier: 1.2,
+      lerp: 0.12,
     });
     lenisRef.current = lenis;
 

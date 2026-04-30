@@ -25,15 +25,17 @@ export default function Sections() {
       const elements = root.querySelectorAll<HTMLElement>('[data-parallax]');
       elements.forEach((el) => {
         const speed = parseFloat(el.dataset.parallax || '0.2');
-        // Use the parent section's center vs viewport center as the
-        // progress signal — gives a clean -1..0..1 range as the section
-        // scrolls through.
-        const section = el.closest('section');
-        if (!section) return;
-        const rect = section.getBoundingClientRect();
-        const sectionCenter = rect.top + rect.height / 2;
+        // Use the parallax element's OWN bounding rect against viewport
+        // center. Works correctly whether the element is in a normal
+        // section or inside a sticky container (long 200vh acts).
+        // First clear our transform so we measure the resting position.
+        const prev = el.style.transform;
+        el.style.transform = '';
+        const rect = el.getBoundingClientRect();
+        el.style.transform = prev;
+        const elCenter = rect.top + rect.height / 2;
         const viewCenter = wh / 2;
-        const offset = (sectionCenter - viewCenter) / wh; // ~-1..1 across screen
+        const offset = (elCenter - viewCenter) / wh; // ~-1..1 across screen
         const ty = offset * speed * 100; // scale to px
         el.style.transform = `translate3d(0, ${ty.toFixed(2)}px, 0)`;
       });
@@ -55,9 +57,18 @@ export default function Sections() {
           <section
             key={a.id}
             id={`act-${i}`}
-            className="relative h-screen w-full snap-start"
+            // 200vh per act gives the cars twice as much scroll runway,
+            // so transitions are slow & cinematic instead of darting.
+            // Hero + Credits stay 100vh so they don't feel padded.
+            className={`relative w-full snap-start ${
+              isHero || isCredits ? 'h-screen' : 'h-[200vh]'
+            }`}
             data-act={i}
           >
+            {/* Sticky inner so the caption stays in frame across the
+                 doubled scroll distance, while the watermark + caption
+                 still parallax against the section's center line. */}
+            <div className={`${isHero || isCredits ? '' : 'sticky top-0 h-screen'} relative w-full`}>
             {/* Caption block — gentle parallax (slower than scroll) */}
             <div
               data-parallax="-0.18"
@@ -158,6 +169,7 @@ export default function Sections() {
                 {String(i).padStart(2, '0')}
               </div>
             )}
+            </div>
           </section>
         );
       })}
