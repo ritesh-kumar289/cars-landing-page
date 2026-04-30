@@ -25,6 +25,15 @@ import { useScrollProgress } from '../lib/scroll';
 
 const CA_OFFSET = new THREE.Vector2(0.0009, 0.0014);
 
+/** Idle rotation speed for car models (radians per second). */
+const IDLE_ROTATION_SPEED = 0.08;
+/** Visibility window size (in act-progress units) for the first car's left
+ *  extension into the hero section. Wider so W13 is partially visible at p=0
+ *  without shifting its peak away from its own act (p=1). */
+const W13_LEFT_WINDOW_SIZE = 1.5;
+/** Symmetric visibility window for all other cars (±0.75 around their act). */
+const DEFAULT_WINDOW_SIZE = 0.75;
+
 /** Smoothly interpolate a value with critical damping. */
 function damp(current: number, target: number, lambda: number, dt: number) {
   return current + (target - current) * (1 - Math.exp(-lambda * dt));
@@ -86,7 +95,7 @@ function CarModel({
   // Subtle idle rotation
   useFrame((state, dt) => {
     if (!ref.current) return;
-    ref.current.rotation.y += dt * 0.08;
+    ref.current.rotation.y += dt * IDLE_ROTATION_SPEED;
     // Smooth visibility fade via scale
     const target = visible;
     ref.current.userData.v = damp(ref.current.userData.v ?? 0, target, 6, dt);
@@ -241,12 +250,13 @@ function ActiveCar() {
     <>
       {CARS.map((c, i) => {
         const center = i + 1; // hero is act 0, car[0] is act 1
-        // Visibility window centred on each car's act.
-        // Hero (p≈0): we nudge car[0] to be partially visible so the hero
-        // isn't a blank black screen. We treat act -0.4 as the hero entry.
-        const heroBoost = i === 0 ? 0.4 : 0; // pull W13 into the hero frame
-        const dist = Math.abs(p - (center - heroBoost));
-        const v = Math.max(0, 1 - dist / 0.75);
+        // Asymmetric visibility window:
+        //   - Car[0] (W13): left window is 1.5 units wide so it shows during the
+        //     hero screen (p=0) without shifting its peak from act center (p=1).
+        //   - All other cars: symmetric ±0.75 window.
+        const distToCenter = p - center;
+        const windowSize = i === 0 && distToCenter < 0 ? W13_LEFT_WINDOW_SIZE : DEFAULT_WINDOW_SIZE;
+        const v = Math.max(0, 1 - Math.abs(distToCenter) / windowSize);
         return (
           <group key={c.id} visible={v > 0.01}>
             <Float speed={0.8} rotationIntensity={0.05} floatIntensity={0.25}>
@@ -328,10 +338,19 @@ export default function CarScene() {
       <color attach="background" args={['#050505']} />
       <fog attach="fog" args={['#050505', 8, 22]} />
 
+      {/* Environment in its own Suspense — the external HDR fetch from the
+          drei CDN must NOT block model rendering. If polyhaven/rawgithack is
+          slow or unreachable, models still render immediately with direct
+          lights only. */}
       <Suspense fallback={null}>
         <Environment preset="warehouse" environmentIntensity={0.55} />
-        {/* Always-on ambient so the hero isn't pitch black */}
-        <ambientLight intensity={0.12} color="#7dd3fc" />
+      </Suspense>
+
+      {/* Always-on ambient fill — lights outside Suspense render immediately */}
+      <ambientLight intensity={0.12} color="#7dd3fc" />
+
+      {/* Model scene — has its own Suspense so GLB loading is independent */}
+      <Suspense fallback={null}>
         <ActiveStage />
         <ActiveCar />
         <Director />
