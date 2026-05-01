@@ -64,12 +64,26 @@ export default function Loader() {
 
     const fetchOne = async (url: string) => {
       try {
-        // Prime the HTTP cache. r3f's GLTFLoader will then read from cache
-        // (instant) so the showcase is hot the moment the loader fades.
+        // Step 1: prime the HTTP cache. r3f's GLTFLoader will then read
+        // from cache instantly during the actual parse below.
         const r = await fetch(url, { cache: 'force-cache' });
         await r.arrayBuffer();
+        if (cancelled) return;
+
+        // Step 2: ACTUALLY PARSE the GLB through GLTFLoader. Without
+        // this, the first time CarModelDriven tries to render a model
+        // we hit a 200\u2013800ms parse stall \u2014 the "scroll feels stuck"
+        // bug. We do the parse here, while the loader bar is on screen,
+        // so the visible scroll is buttery.
+        const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
+        const loader = new GLTFLoader();
+        await loader.loadAsync(url);
+
+        // Step 3: also seed drei's useGLTF cache so the suspense layer
+        // resolves synchronously when CarModelDriven mounts.
+        useGLTF.preload(url);
       } catch {
-        // ignore — count as loaded so we don't deadlock the UI
+        // ignore \u2014 count as loaded so we don't deadlock the UI
       } finally {
         if (!cancelled) {
           loaded += 1;
@@ -80,12 +94,14 @@ export default function Loader() {
 
     expected.forEach(fetchOne);
 
-    // Hard timeout safety net — never strand the user if a slow CDN drags
+    // Hard timeout safety net \u2014 never strand the user if a slow CDN drags.
+    // Bumped from 30s \u2192 90s now that we also wait for full GLB PARSE,
+    // and reels can have up to 8 cars at 15\u201320MB each.
     const hardTimeout = setTimeout(() => {
       if (cancelled) return;
       setProgress(100);
       setDone(true);
-    }, 30000);
+    }, 90000);
 
     return () => {
       cancelled = true;
