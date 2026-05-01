@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { ACTS, TOTAL_ACTS } from '../lib/cars';
+import { useReel } from '../lib/reel';
 import Marquee from './Marquee';
 
 /**
@@ -14,6 +14,7 @@ import Marquee from './Marquee';
  */
 export default function Sections() {
   const rootRef = useRef<HTMLElement>(null);
+  const { acts } = useReel();
 
   useEffect(() => {
     if (!rootRef.current) return;
@@ -47,9 +48,9 @@ export default function Sections() {
 
   return (
     <main ref={rootRef} className="relative z-10">
-      {ACTS.map((a, i) => {
+      {acts.map((a, i) => {
         const isHero = i === 0;
-        const isCredits = i === TOTAL_ACTS - 1;
+        const isCredits = i === acts.length - 1;
         const isCar = !isHero && !isCredits;
         const align = i % 2 === 0 ? 'items-start text-left' : 'items-end text-right';
 

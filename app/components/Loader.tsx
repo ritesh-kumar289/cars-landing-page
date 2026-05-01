@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useGLTF } from '@react-three/drei';
-import { CARS } from '../lib/cars';
+import { useReel } from '../lib/reel';
 
 /**
  * Loader — black card with an SVG F1 car silhouette that drives left → right
@@ -11,17 +11,12 @@ import { CARS } from '../lib/cars';
  *  - Pure SVG (no 3D canvas) so the car is visible at 0% and renders
  *    instantly, with no GLB-load dependency.
  *  - Side profile, nose pointing RIGHT (direction of travel).
- *  - Loader gates on ALL car GLBs so by the time the showcase appears,
- *    every transition is hot — no per-car parse stalls during scroll.
+ *  - Loader gates on the ACTIVE reel's car GLBs only — not all 12 —
+ *    so reel switches stay snappy.
  */
 
-// Preload every car GLB up-front. Yes, this makes the loader run a
-// little longer, but the user explicitly preferred this trade-off:
-// "loading will complete once all model are loaded and renderable on
-// screen" — i.e. zero stalls between transitions.
-CARS.forEach((c) => useGLTF.preload(c.model));
-
 export default function Loader() {
+  const { cars } = useReel();
   const [progress, setProgress] = useState(0);
   const [done, setDone] = useState(false);
   const [hide, setHide] = useState(false);
@@ -29,26 +24,31 @@ export default function Loader() {
   const wheelLRef = useRef<SVGGElement | null>(null);
   const wheelRRef = useRef<SVGGElement | null>(null);
 
+  // Preload the active reel's GLBs (idempotent \u2014 useGLTF caches by URL).
+  useEffect(() => {
+    cars.forEach((c) => useGLTF.preload(c.model));
+  }, [cars]);
+
   // Drive the car wrapper position from progress via the DOM (avoids
   // re-rendering on every progress tick).
   useEffect(() => {
     if (!carWrapRef.current) return;
     const t = Math.min(1, Math.max(0, progress / 100));
-    // 0% → far-left edge (left:0), 100% → car-box flush against right edge.
+    // 0% \u2192 far-left edge (left:0), 100% \u2192 car-box flush against right edge.
     carWrapRef.current.style.left = `calc(${t * 100}vw - ${t * 320}px)`;
   }, [progress]);
 
   useEffect(() => {
-    // Explicit per-URL completion tracking — the THREE DefaultLoadingManager
-    // can fire `onLoad` prematurely when one batch finishes before the next
-    // registers, causing the loader to flash 100% while other models are
-    // still downloading. We instead fetch each model URL ourselves with
-    // `Cache.add` so the browser caches the bytes and we know exactly when
-    // every car is in cache.
-    // Block the loader on EVERY car GLB so the showcase is fully primed
-    // by the time the user sees it. Eliminates per-transition parse
-    // stalls.
-    const expected = CARS.map((c) => c.model);
+    // Gate on the active reel's GLBs only \u2014 reel switches must feel
+    // snappy, so we don't make the user wait for the other reels' models.
+    const expected = cars.map((c) => c.model);
+    if (expected.length === 0) {
+      // Empty reel \u2014 no models to load. Skip straight to "done" so the
+      // ReelEmpty placeholder takes over.
+      setProgress(100);
+      setDone(true);
+      return;
+    }
     let cancelled = false;
     let loaded = 0;
 
@@ -91,7 +91,7 @@ export default function Loader() {
       cancelled = true;
       clearTimeout(hardTimeout);
     };
-  }, []);
+  }, [cars]);
 
   // Spin the wheels via direct DOM (no React re-renders).
   useEffect(() => {

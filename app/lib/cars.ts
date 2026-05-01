@@ -9,8 +9,25 @@ export type Act = {
   index: number;
 };
 
+export type ReelId = 'f1' | 'hyper' | 'jdm' | 'muscle' | 'overland';
+
+export type Reel = {
+  id: ReelId;
+  name: string;
+  tagline: string;
+};
+
+export const REELS: Reel[] = [
+  { id: 'f1',       name: 'Formula 1',       tagline: 'Open-wheel obsession.' },
+  { id: 'hyper',    name: 'Hypercars',       tagline: 'No rules. Just numbers.' },
+  { id: 'jdm',      name: 'JDM Legends',     tagline: 'Touge prophets.' },
+  { id: 'muscle',   name: 'Muscle & Classics', tagline: 'Detroit thunder, Bavarian boxes.' },
+  { id: 'overland', name: 'Off-road / Overland', tagline: 'Permission denied.' },
+];
+
 export type Car = {
   id: string;
+  category: ReelId;
   name: string;
   series: string;
   era: string;
@@ -31,6 +48,7 @@ export type Car = {
 export const CARS: Car[] = [
   {
     id: 'w13',
+    category: 'f1',
     name: 'Mercedes W13',
     series: 'F1 — 2022 Concept',
     era: '2022',
@@ -46,6 +64,7 @@ export const CARS: Car[] = [
   },
   {
     id: 'f40',
+    category: 'hyper',
     name: 'Ferrari F40',
     series: 'Hypercar — 1987',
     era: '1987',
@@ -61,6 +80,7 @@ export const CARS: Car[] = [
   },
   {
     id: 'mclaren',
+    category: 'f1',
     name: 'McLaren MP4',
     series: 'F1 — Papaya',
     era: '1990s',
@@ -76,6 +96,7 @@ export const CARS: Car[] = [
   },
   {
     id: 'rwb',
+    category: 'jdm',
     name: 'Porsche 911 RWB',
     series: 'Tuner — Rauh-Welt',
     era: 'Modern',
@@ -91,6 +112,7 @@ export const CARS: Car[] = [
   },
   {
     id: 'sf2019',
+    category: 'f1',
     name: 'Ferrari SF90',
     series: 'F1 — 2019',
     era: '2019',
@@ -106,6 +128,7 @@ export const CARS: Car[] = [
   },
   {
     id: 'mustang',
+    category: 'muscle',
     name: 'Ford Mustang Boss 302',
     series: 'Muscle — 1970',
     era: '1970',
@@ -121,6 +144,7 @@ export const CARS: Car[] = [
   },
   {
     id: 'amgone',
+    category: 'hyper',
     name: 'Mercedes-AMG ONE',
     series: 'Hypercar — 2022',
     era: '2022',
@@ -136,6 +160,7 @@ export const CARS: Car[] = [
   },
   {
     id: 'defender',
+    category: 'overland',
     name: 'Land Rover Defender 110',
     series: 'Overland — 2021',
     era: '2021',
@@ -151,6 +176,7 @@ export const CARS: Car[] = [
   },
   {
     id: 'r34',
+    category: 'jdm',
     name: 'Nissan Skyline GT-R R34',
     series: 'JDM — 1999 C-West',
     era: '1999',
@@ -166,6 +192,7 @@ export const CARS: Car[] = [
   },
   {
     id: 'fordgt',
+    category: 'hyper',
     name: 'Ford GT',
     series: 'Supercar — 2006',
     era: '2006',
@@ -181,6 +208,7 @@ export const CARS: Car[] = [
   },
   {
     id: 'e30',
+    category: 'muscle',
     name: 'BMW M3 E30',
     series: 'DTM — 1986',
     era: '1986',
@@ -196,6 +224,7 @@ export const CARS: Car[] = [
   },
   {
     id: 'generico',
+    category: 'f1',
     name: 'Formula Apex',
     series: 'F1 — Concept',
     era: 'Tomorrow',
@@ -212,44 +241,69 @@ export const CARS: Car[] = [
 ];
 
 // Total scroll acts = 1 (hero) + cars + 1 (credits)
-export const ACTS: Act[] = [
-  {
-    id: 'hero',
-    index: 0,
-    title: 'OFF TRACKS',
-    subtitle: 'Off the tracks. Driven obsessions.',
-    body: 'A private collection of machines that should not exist — and the films we shoot about them. Scroll to enter.',
-    meta: [
-      { label: 'Reel', value: 'No. 07' },
-      { label: 'Year', value: '2025' },
-      { label: 'Format', value: '70mm / 24fps' },
-    ],
-  },
-  ...CARS.map<Act>((c, i) => ({
-    id: c.id,
-    index: i + 1,
-    title: c.name,
-    subtitle: c.series,
-    bodyTop: `Act ${String(i + 1).padStart(2, '0')} — ${c.era}`,
-    body: c.note,
-    meta: [
-      { label: 'Origin', value: c.origin },
-      { label: 'Era', value: c.era },
-      { label: 'Class', value: c.series },
-    ],
-  })),
-  {
-    id: 'credits',
-    index: CARS.length + 1,
-    title: 'End of reel.',
-    subtitle: 'Find what others can\u2019t.',
-    body: 'OFF TRACKS sources, documents, and films one-of-one machines for collectors who treat speed as a language. Request access to the next reel.',
-    meta: [
-      { label: 'Direction', value: 'OFF TRACKS Studio' },
-      { label: 'Score', value: 'Original' },
-      { label: 'Stock', value: 'Kodak 5219' },
-    ],
-  },
-];
+function buildActs(cars: Car[], reel?: Reel): Act[] {
+  const heroSubtitle = reel ? reel.tagline : 'Off the tracks. Driven obsessions.';
+  const heroBody = reel
+    ? `Reel: ${reel.name}. ${cars.length} machines selected. Scroll to enter.`
+    : 'A private collection of machines that should not exist — and the films we shoot about them. Scroll to enter.';
+  return [
+    {
+      id: 'hero',
+      index: 0,
+      title: 'OFF TRACKS',
+      subtitle: heroSubtitle,
+      body: heroBody,
+      meta: [
+        { label: 'Reel', value: reel ? reel.name : 'No. 07' },
+        { label: 'Cars', value: String(cars.length) },
+        { label: 'Format', value: '70mm / 24fps' },
+      ],
+    },
+    ...cars.map<Act>((c, i) => ({
+      id: c.id,
+      index: i + 1,
+      title: c.name,
+      subtitle: c.series,
+      bodyTop: `Act ${String(i + 1).padStart(2, '0')} — ${c.era}`,
+      body: c.note,
+      meta: [
+        { label: 'Origin', value: c.origin },
+        { label: 'Era', value: c.era },
+        { label: 'Class', value: c.series },
+      ],
+    })),
+    {
+      id: 'credits',
+      index: cars.length + 1,
+      title: 'End of reel.',
+      subtitle: 'Find what others can\u2019t.',
+      body: 'OFF TRACKS sources, documents, and films one-of-one machines for collectors who treat speed as a language. Request access to the next reel.',
+      meta: [
+        { label: 'Direction', value: 'OFF TRACKS Studio' },
+        { label: 'Score', value: 'Original' },
+        { label: 'Stock', value: 'Kodak 5219' },
+      ],
+    },
+  ];
+}
 
+/** Cars filtered to a specific reel category. */
+export function getCarsForReel(reelId: ReelId): Car[] {
+  return CARS.filter((c) => c.category === reelId);
+}
+
+/** Acts (hero + per-car + credits) for a specific reel. */
+export function getActsForReel(reelId: ReelId): Act[] {
+  const reel = REELS.find((r) => r.id === reelId);
+  return buildActs(getCarsForReel(reelId), reel);
+}
+
+/** Whether a reel has the minimum number of cars to be playable. */
+export const REEL_MIN_CARS = 4;
+export function isReelReady(reelId: ReelId): boolean {
+  return getCarsForReel(reelId).length >= REEL_MIN_CARS;
+}
+
+// Backward-compat full-list ACTS (all 12 cars).
+export const ACTS: Act[] = buildActs(CARS);
 export const TOTAL_ACTS = ACTS.length;

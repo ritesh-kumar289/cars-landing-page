@@ -9,7 +9,7 @@ import {
   PerformanceMonitor,
 } from '@react-three/drei';
 import * as THREE from 'three';
-import { CARS } from '../lib/cars';
+import { useReel } from '../lib/reel';
 import { scrollRef } from '../lib/scroll';
 
 /**
@@ -72,11 +72,12 @@ function detectMobile() {
  */
 function Director() {
   const { camera } = useThree();
+  const { cars } = useReel();
 
   // Per-act camera "beats" (position, lookAt). Three beats per car (in/hero/out)
   // give us long, sweeping transitions instead of short pops.
   const beats = useMemo(() => {
-    const carBeats = CARS.flatMap((_, i) => {
+    const carBeats = cars.flatMap((_, i) => {
       const sign = i % 2 === 0 ? 1 : -1;
       return [
         // Entrance: wide 3/4 low, far away
@@ -95,7 +96,7 @@ function Director() {
       // Credits: pull back high
       { pos: new THREE.Vector3(0, 3.4, 8.4), look: new THREE.Vector3(0, 0, 0) },
     ];
-  }, []);
+  }, [cars]);
 
   const lookAtTmp = useRef(new THREE.Vector3());
   const posTmp = useRef(new THREE.Vector3());
@@ -202,8 +203,9 @@ function catmullRom(
 }
 
 function ActiveCar() {
+  const { cars } = useReel();
   const groupRefs = useRef<THREE.Group[]>([]);
-  const total = CARS.length + 2;
+  const total = cars.length + 2;
   const isMobileRef = useRef(false);
   const lazyWindowRef = useRef(LAZY_WINDOW_DESKTOP);
   useEffect(() => {
@@ -214,9 +216,9 @@ function ActiveCar() {
   // Bitmask of which car indices are currently mounted. Updated only when
   // the active window changes (not every frame), so React renders are rare.
   const [mounted, setMounted] = useState<boolean[]>(() => {
-    const arr = new Array(CARS.length).fill(false);
-    arr[0] = true;
-    arr[1] = true;
+    const arr = new Array(cars.length).fill(false);
+    if (arr.length > 0) arr[0] = true;
+    if (arr.length > 1) arr[1] = true;
     return arr;
   });
   const mountedRef = useRef(mounted);
@@ -230,7 +232,7 @@ function ActiveCar() {
     const W = lazyWindowRef.current;
     let dirty = false;
     const next = mountedRef.current.slice();
-    CARS.forEach((_, i) => {
+    cars.forEach((_, i) => {
       const center = i + 1;
       const distToCenter = p - center;
       const windowSize = i === 0 && distToCenter < 0 ? W13_LEFT_WINDOW_SIZE : DEFAULT_WINDOW_SIZE;
@@ -246,10 +248,10 @@ function ActiveCar() {
       const shouldMount = Math.abs(distToCenter) < W + 0.5;
       if (
         Math.abs(distToCenter) < W + 1.5 &&
-        !prefetched.current.has(CARS[i].model)
+        !prefetched.current.has(cars[i].model)
       ) {
-        prefetched.current.add(CARS[i].model);
-        useGLTF.preload(CARS[i].model);
+        prefetched.current.add(cars[i].model);
+        useGLTF.preload(cars[i].model);
       }
       if (shouldMount && !next[i]) {
         next[i] = true;
@@ -273,7 +275,7 @@ function ActiveCar() {
 
   return (
     <>
-      {CARS.map((c, i) => (
+      {cars.map((c, i) => (
         <group key={c.id} ref={(el) => { if (el) groupRefs.current[i] = el; }}>
           {mounted[i] ? (
             <Suspense fallback={null}>
@@ -569,6 +571,7 @@ function SharedLights({
 }: {
   groupRefs: React.MutableRefObject<THREE.Group[]>;
 }) {
+  const { cars } = useReel();
   const ambRef = useRef<THREE.AmbientLight>(null);
   const keyRef = useRef<THREE.DirectionalLight>(null);
   const rimRef = useRef<THREE.DirectionalLight>(null);
@@ -578,17 +581,18 @@ function SharedLights({
   const tmpColor = useMemo(() => new THREE.Color(), []);
 
   useFrame(() => {
+    if (cars.length === 0) return;
     // Find the most-visible car and adopt its rim/fill palette.
     let bestI = 0;
     let bestV = 0;
-    for (let i = 0; i < CARS.length; i++) {
+    for (let i = 0; i < cars.length; i++) {
       const v = (groupRefs.current[i]?.userData.v as number | undefined) ?? 0;
       if (v > bestV) {
         bestV = v;
         bestI = i;
       }
     }
-    const car = CARS[bestI];
+    const car = cars[bestI];
     tmpColor.set(car.rim);
     rimColor.lerp(tmpColor, 0.08);
     tmpColor.set(car.fill);
@@ -622,30 +626,32 @@ function SharedLights({
 }
 
 function ActiveStage() {
+  const { cars } = useReel();
   const stageRef = useRef<THREE.MeshStandardMaterial>(null);
   const colorA = useMemo(() => new THREE.Color(), []);
   const colorB = useMemo(() => new THREE.Color(), []);
-  const total = CARS.length + 2;
+  const total = cars.length + 2;
 
   useFrame(() => {
-    if (!stageRef.current) return;
+    if (!stageRef.current || cars.length === 0) return;
     const p = scrollRef.current * (total - 1);
-    const i0 = Math.max(0, Math.min(CARS.length - 1, Math.floor(p) - 1));
-    const i1 = Math.max(0, Math.min(CARS.length - 1, i0 + 1));
+    const i0 = Math.max(0, Math.min(cars.length - 1, Math.floor(p) - 1));
+    const i1 = Math.max(0, Math.min(cars.length - 1, i0 + 1));
     const t = Math.max(0, Math.min(1, p - 1 - i0));
     const ts = t * t * (3 - 2 * t);
-    colorA.set(CARS[i0].ground);
-    colorB.set(CARS[i1].ground);
+    colorA.set(cars[i0].ground);
+    colorB.set(cars[i1].ground);
     stageRef.current.color.copy(colorA).lerp(colorB, ts);
   });
 
+  const fallbackGround = cars[0]?.ground ?? '#0a0a0a';
   return (
     <>
       {/* Floor disc enlarged 20 → 36 so cars staging from ±20 units away
           on either side never appear to slide off the edge of the world. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.7, 0]}>
         <circleGeometry args={[36, 64]} />
-        <meshStandardMaterial ref={stageRef} color={CARS[0].ground} metalness={0.4} roughness={0.6} />
+        <meshStandardMaterial ref={stageRef} color={fallbackGround} metalness={0.4} roughness={0.6} />
       </mesh>
       <ContactShadows
         position={[0, -0.69, 0]}
@@ -673,7 +679,13 @@ export default function CarScene() {
   // Mobile browsers crash the WebGL context after a few heavy GLBs are
   // uploaded if we let DPR scale up. Pin a much tighter cap on phones.
   const isMobile = typeof window !== 'undefined' && detectMobile();
-  const [dpr, setDpr] = useState(isMobile ? 0.7 : 1);
+  // Lift desktop quality: start higher, allow up to native devicePixelRatio
+  // (capped at 2 to keep GPU fillrate sane). Mobile stays clamped to
+  // protect against context loss \u2014 these phones can't sustain higher.
+  const desktopMaxDpr = typeof window !== 'undefined'
+    ? Math.min(2, window.devicePixelRatio || 1)
+    : 1.5;
+  const [dpr, setDpr] = useState(isMobile ? 0.7 : desktopMaxDpr);
   const [reduced, setReduced] = useState(false);
   const [contextLost, setContextLost] = useState(false);
 
@@ -725,7 +737,7 @@ export default function CarScene() {
   return (
     <Canvas
       gl={{
-        antialias: false,
+        antialias: !isMobile,
         alpha: true,
         powerPreference: 'high-performance',
         toneMapping: THREE.ACESFilmicToneMapping,
@@ -747,14 +759,14 @@ export default function CarScene() {
         canvas.addEventListener('webglcontextlost', onLost as EventListener);
         canvas.addEventListener('webglcontextrestored', onRestored as EventListener);
       }}
-      dpr={isMobile ? [0.5, 0.85] : [0.7, dpr]}
+      dpr={isMobile ? [0.5, 0.85] : [1, dpr]}
       camera={{ position: [0, 1, 6], fov: 35, near: 0.1, far: 60 }}
       style={{ position: 'fixed', inset: 0, zIndex: 0, cursor: 'grab', touchAction: 'pan-y' }}
       frameloop="always"
     >
       <PerformanceMonitor
-        onIncline={() => setDpr((d) => Math.min(isMobile ? 0.85 : 1.1, d + 0.1))}
-        onDecline={() => setDpr((d) => Math.max(isMobile ? 0.5 : 0.7, d - 0.2))}
+        onIncline={() => setDpr((d) => Math.min(isMobile ? 0.85 : desktopMaxDpr, d + 0.1))}
+        onDecline={() => setDpr((d) => Math.max(isMobile ? 0.5 : 1, d - 0.2))}
       />
       <color attach="background" args={['#050505']} />
       <fog attach="fog" args={['#050505', 12, 38]} />

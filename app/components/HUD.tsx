@@ -2,13 +2,14 @@
 
 import { useEffect, useRef } from 'react';
 import { useScrollProgress, scrollRef } from '../lib/scroll';
-import { ACTS } from '../lib/cars';
+import { useReel } from '../lib/reel';
 
 export default function HUD() {
   // Only `act` is read from React state (changes rarely). Progress is
   // pulled from `scrollRef` every frame and written directly to the DOM
   // so the HUD never re-renders during scroll.
   const { act } = useScrollProgress();
+  const { acts } = useReel();
   const barRef = useRef<HTMLDivElement | null>(null);
   const tcRef = useRef<HTMLDivElement | null>(null);
 
@@ -51,7 +52,7 @@ export default function HUD() {
       <div className="letterbox-bottom" aria-hidden />
 
       <aside className="fixed right-6 top-1/2 -translate-y-1/2 z-50 hidden md:flex flex-col items-center gap-3">
-        {ACTS.map((a, i) => (
+        {acts.map((a, i) => (
           <a
             key={a.id}
             href={`#act-${i}`}
